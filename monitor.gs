@@ -166,10 +166,13 @@ function sheet_(name, head) {
 function clean_(v, max) { return String(v == null ? '' : v).replace(/^[=+\-@\t\r]+/, '').trim().slice(0, max); }
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-/** Optional: run once a month from the editor (or a monthly trigger) to keep only 180 days of usage events. */
+/** Run once a month (manually or with a monthly time-driven trigger): keeps only 180 days of usage events and technical errors. */
 function trimOldEvents() {
-  const sh = sheet_(T_EV, H_EV), n = sh.getLastRow() - 1; if (n < 1) return;
-  const cut = Date.now() - 180 * 864e5, v = sh.getRange(2, 1, n, 1).getValues();
-  let k = 0; while (k < v.length && new Date(v[k][0]).getTime() < cut) k++;
-  if (k) sh.deleteRows(2, k);
+  const cut = Date.now() - 180 * 864e5;
+  [[T_EV, H_EV], [T_ERR, H_ERR]].forEach(([tab, head]) => {
+    const sh = sheet_(tab, head), n = sh.getLastRow() - 1; if (n < 1) return;
+    const v = sh.getRange(2, 1, n, 1).getValues();
+    let k = 0; while (k < v.length && new Date(v[k][0]).getTime() < cut) k++;
+    if (k) sh.deleteRows(2, k);
+  });
 }
