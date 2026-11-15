@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>סקר משוב – מה בא לי</title>
+<meta name="description" content="סקר קצר (כ-3 דקות) למשפחות שהשתתפו בניסוי של "מה בא לי"">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Rubik:wght@400;500;700&display=swap">
+<style>
+:root{
+  --bg:#f3f1ea; --surface:#fffdf8; --ink:#1d2a2a; --muted:#5c6b69; --line:#dcd8cc;
+  --sea:#1f7a73; --sea-soft:#d6ebe7; --sea-ink:#145a54; --rust:#b2532e; --rust-soft:#f4ddd2; --good:#2f7d3a;
+  --f-display:"Varela Round",system-ui,sans-serif; --f-body:"Rubik",system-ui,sans-serif;
+  color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121a1a; --surface:#1a2525; --ink:#e7ece9; --muted:#9fb0ad; --line:#2d3b3a;
+  --sea:#5cc2b8; --sea-soft:#1d3a37; --sea-ink:#8fdcd3; --rust:#e48a64; --rust-soft:#3c2820; --good:#7cc788; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121a1a; --surface:#1a2525; --ink:#e7ece9; --muted:#9fb0ad; --line:#2d3b3a;
+  --sea:#5cc2b8; --sea-soft:#1d3a37; --sea-ink:#8fdcd3; --rust:#e48a64; --rust-soft:#3c2820; --good:#7cc788; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.5}
+.skip{position:absolute;inset-inline-start:-9999px}.skip:focus{inset-inline-start:16px;top:8px;background:var(--surface);padding:8px 12px;border-radius:8px;z-index:9}
+main{max-width:640px;margin:0 auto;padding:20px 16px 96px}
+header h1{font-family:var(--f-display);font-weight:400;color:var(--sea);font-size:1.7rem;margin:4px 0}
+header p{margin:0;color:var(--muted)}
+.bar{height:6px;border-radius:99px;background:var(--line);margin:16px 0 4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--sea);transition:width .25s}
+.prog{font-size:.85rem;color:var(--muted)}
+fieldset,.card{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:16px;margin:14px 0}
+legend{font-weight:700;padding:0 6px;font-size:1.02rem}
+.hint{color:var(--muted);font-size:.88rem;margin:2px 0 10px}
+label.f{display:block;font-weight:600;margin:10px 0 4px}
+input[type=text],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:88px;resize:vertical}
+.scale{display:flex;gap:6px;flex-wrap:wrap}
+.scale label{flex:1 1 0;min-width:44px;position:relative}
+.scale input,.opts input{position:absolute;opacity:0;width:1px;height:1px}
+.scale span{display:flex;align-items:center;justify-content:center;min-height:46px;border:1.5px solid var(--line);border-radius:12px;font-weight:700;cursor:pointer;background:var(--bg)}
+.scale input:checked+span{background:var(--sea);border-color:var(--sea);color:#fff}
+.scale input:focus-visible+span,.opts input:focus-visible+span{outline:3px solid var(--rust);outline-offset:2px}
+.ends{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-top:4px}
+.nps label{min-width:38px}.nps span{min-height:42px}
+.q{padding:10px 0;border-top:1px dashed var(--line)}.q:first-of-type{border-top:0}
+.q>.t{font-weight:600;margin-bottom:6px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opts label{position:relative}
+.opts span{display:inline-block;padding:9px 14px;border:1.5px solid var(--line);border-radius:999px;cursor:pointer;background:var(--bg)}
+.opts input:checked+span{background:var(--sea-soft);border-color:var(--sea);color:var(--sea-ink);font-weight:700}
+.consent{display:flex;gap:10px;align-items:flex-start}
+.consent input{width:22px;height:22px;margin-top:3px;accent-color:var(--sea)}
+.err{color:var(--rust);font-size:.9rem;font-weight:600;margin-top:6px}
+.bad{border-color:var(--rust)!important;background:var(--rust-soft)}
+button{font:inherit;font-weight:700;border:0;border-radius:14px;padding:14px 18px;cursor:pointer}
+.primary{background:var(--sea);color:#fff;width:100%;font-size:1.05rem}
+.ghost{background:transparent;color:var(--sea);border:1.5px solid var(--sea)}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--rust);outline-offset:2px}
+.done{text-align:center;padding:32px 16px}
+.done h2{font-family:var(--f-display);font-weight:400;color:var(--sea);font-size:1.6rem}
+.hp{position:absolute;inset-inline-start:-9999px}
+footer{margin-top:24px;font-size:.8rem;color:var(--muted);text-align:center}
+.links textarea{min-height:140px;direction:ltr;text-align:left;font-size:.85rem}
+.links li{margin:6px 0;word-break:break-all}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#survey">דילוג לסקר</a>
+<main id="main">
+<header>
+  <h1>איך היה לצאת איתנו?</h1>
+  <p>סקר קצר, כ-3 דקות, למשפחות שהשתתפו בניסוי של <b>מה בא לי</b>. התשובות עוזרות לנו להחליט מה לשפר.</p>
+  <div class="bar" aria-hidden="true"><i id="barFill"></i></div>
+  <div class="prog" id="prog" aria-live="polite"></div>
+</header>
+
+<form id="survey" novalidate>
+  <fieldset>
+    <legend>מי עונה</legend>
+    <label class="f" for="family">שם המשפחה</label>
+    <input type="text" id="family" name="family" autocomplete="family-name" required aria-describedby="familyHint">
+    <div class="hint" id="familyHint">כמו שמופיע אצלנו ברשימה (למשל: כהן)</div>
+    <label class="f" for="round">סבב</label>
+    <select id="round" name="round" required>
+      <option value="חודש 1">אחרי חודש</option>
+      <option value="חודש 2">אחרי חודשיים</option>
+    </select>
+  </fieldset>
+
+  <fieldset id="ratings">
+    <legend>דרגו מ-1 (גרוע) עד 5 (מצוין)</legend>
+    <p class="hint">אם לא השתמשתם באפשרות מסוימת, אפשר לדלג עליה.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>המלצה</legend>
+    <div class="q" role="radiogroup" aria-labelledby="npsT" id="npsQ">
+      <div class="t" id="npsT">עד כמה סביר שתמליצו על האפליקציה לחברים? <span aria-hidden="true">*</span></div>
+      <div class="scale nps" id="npsScale"></div>
+      <div class="ends" aria-hidden="true"><span>0 – בכלל לא</span><span>10 – בטוח</span></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>תועלת</legend>
+    <div class="q" role="radiogroup" aria-labelledby="foundT" id="foundQ">
+      <div class="t" id="foundT">כשפתחתם את האפליקציה – מצאתם לאן לצאת? <span aria-hidden="true">*</span></div>
+      <div class="opts" data-name="found" data-opts="כן|חלקית|לא"></div>
+    </div>
+    <div class="q" role="radiogroup" aria-labelledby="payT" id="payQ">
+      <div class="t" id="payT">כמה הייתם מוכנים לשלם בחודש על גרסה מורחבת?</div>
+      <div class="opts" data-name="pay" data-opts="לא אשלם|עד 10 ₪|19 ₪|יותר מ-19 ₪|רק מנוי שנתי"></div>
+    </div>
+    <div class="q" role="radiogroup" aria-labelledby="bestT">
+      <div class="t" id="bestT">מה היה הכי שימושי?</div>
+      <div class="opts" data-name="best" data-opts="הצעות לפי מזג האוויר|התאמה לגילאי הילדים|מחיר משוער למשפחה|שעות פתיחה|ניווט וקישורים|קבוצות וסקרים|תמונות ודירוגים|אחר"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>במילים שלכם</legend>
+    <label class="f" for="missing">מה חסר לכם או מה כדאי לשפר?</label>
+    <textarea id="missing" name="missing" maxlength="1500"></textarea>
+    <label class="f" for="notes">עוד משהו? (מקום שאהבתם, טעות שמצאתם, רעיון)</label>
+    <textarea id="notes" name="notes" maxlength="1500"></textarea>
+    <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+  </fieldset>
+
+  <div class="card consent">
+    <input type="checkbox" id="consent" required>
+    <label for="consent">אני מסכים/ה שהתשובות יישמרו אצל צוות "מה בא לי" וישמשו רק לשיפור האפליקציה. אפשר לבקש למחוק אותן בכל עת.</label>
+  </div>
+  <div class="err" id="formErr" role="alert"></div>
+  <button class="primary" type="submit" id="send">שליחת הסקר</button>
+</form>
+
+<section class="done" id="done" hidden tabindex="-1">
+  <h2>תודה רבה!</h2>
+  <p id="doneMsg">התשובות התקבלו. נתראה בטיול הבא.</p>
+  <p><a id="backApp" href="./">חזרה לאפליקציה</a></p>
+</section>
+
+<section class="card links" id="admin" hidden>
+  <h2 style="margin-top:0">יצירת קישורים אישיים לסקר</h2>
+  <p class="hint">שם משפחה בכל שורה, בדיוק כמו בגיליון. כל קישור ממלא מראש את השם והסבב.</p>
+  <label class="f" for="names">שמות המשפחות</label>
+  <textarea id="names" dir="rtl" style="direction:rtl;text-align:right"></textarea>
+  <label class="f" for="aRound">סבב</label>
+  <select id="aRound"><option value="1">אחרי חודש</option><option value="2">אחרי חודשיים</option></select>
+  <p><button type="button" class="ghost" id="mk">יצירת קישורים</button></p>
+  <ul id="out"></ul>
+</section>
+
+<footer>© 2026 ליעוז גאון · מה בא לי · התשובות נשמרות בגיליון הפרטי של הצוות בלבד</footer>
+</main>
+
+<script>
+/* ===== הגדרות: ממלאים פעם אחת ===== */
+const SURVEY_CONFIG = {
+  endpoint: "",        // כתובת ה-Web App של Google Apps Script (מסתיימת ב-/exec)
+  whatsapp: "",        // גיבוי: מספר וואטסאפ בפורמט בינלאומי, למשל 9725XXXXXXXX
+  appUrl: "./"         // כתובת האפליקציה, לכפתור "חזרה"
+};
+const VERSION = "1.9.0";
+/* ===================================== */
+
+const PARAMS = [
+  ["ease","קלות שימוש"],
+  ["fit","התאמת ההצעות למשפחה"],
+  ["accuracy","דיוק המידע (שעות, מחיר)"],
+  ["weather","המלצת מזג האוויר"],
+  ["design","עיצוב ונגישות"],
+  ["groups","תכנון בקבוצה וסקרים"],
+  ["speed","מהירות וזמינות"]
+];
+const $ = s => document.querySelector(s);
+const store = {get(){try{return JSON.parse(localStorage.getItem("fo_survey")||"{}")}catch(e){return {}}},
+  set(v){try{localStorage.setItem("fo_survey",JSON.stringify(v))}catch(e){}},
+  clear(){try{localStorage.removeItem("fo_survey")}catch(e){}}};
+
+function scale(name, from, to, labelFor){
+  let h = "";
+  for(let i=from;i<=to;i++){
+    h += `<label><input type="radio" name="${name}" value="${i}" aria-label="${labelFor(i)}"><span aria-hidden="true">${i}</span></label>`;
+  }
+  return h;
+}
+const r5 = ["","גרוע","חלש","סביר","טוב","מצוין"];
+let rh = "";
+PARAMS.forEach(([k,t])=>{
+  rh += `<div class="q" role="radiogroup" aria-labelledby="t_${k}"><div class="t" id="t_${k}">${t}</div>
+  <div class="scale">${scale(k,1,5,i=>`${t}: ${i} – ${r5[i]}`)}</div>
+  <div class="ends" aria-hidden="true"><span>1 גרוע</span><span>5 מצוין</span></div></div>`;
+});
+$("#ratings").insertAdjacentHTML("beforeend", rh);
+$("#npsScale").innerHTML = scale("nps",0,10,i=>`סיכוי להמליץ: ${i} מתוך 10`);
+document.querySelectorAll(".opts").forEach(box=>{
+  const n = box.dataset.name;
+  box.innerHTML = box.dataset.opts.split("|").map(o=>`<label><input type="radio" name="${n}" value="${o}"><span>${o}</span></label>`).join("");
+});
+
+/* prefill from link: ?f=כהן&r=1 */
+const qs = new URLSearchParams(location.search);
+const f = $("#survey");
+const saved = store.get();
+function restore(){
+  for(const [k,v] of Object.entries(saved)){
+    const el = f.elements[k];
+    if(!el) continue;
+    if(el instanceof RadioNodeList){ [...el].forEach(x=>x.checked = x.value===v); }
+    else if(el.type!=="checkbox") el.value = v;
+  }
+}
+restore();
+if(qs.get("f")) f.elements.family.value = qs.get("f").slice(0,60);
+if(qs.get("r")==="2") f.elements.round.value = "חודש 2";
+else if(qs.get("r")==="1") f.elements.round.value = "חודש 1";
+if(SURVEY_CONFIG.appUrl) $("#backApp").href = SURVEY_CONFIG.appUrl;
+
+const answerable = ["family", ...PARAMS.map(p=>p[0]), "nps","found","pay","best","missing"];
+function progress(){
+  const fd = new FormData(f);
+  const n = answerable.filter(k=>String(fd.get(k)||"").trim()!=="").length;
+  $("#barFill").style.width = Math.round(n/answerable.length*100)+"%";
+  $("#prog").textContent = `ענית על ${n} מתוך ${answerable.length} שאלות`;
+}
+function save(){
+  const fd = new FormData(f), o = {};
+  for(const [k,v] of fd.entries()) if(k!=="website") o[k]=v;
+  store.set(o);
+}
+f.addEventListener("input",()=>{save();progress();});
+f.addEventListener("change",()=>{save();progress();});
+progress();
+
+function collect(){
+  const fd = new FormData(f), g = k => String(fd.get(k)||"").trim();
+  const d = {
+    v: VERSION,
+    submittedAt: new Date().toISOString(),
+    family: g("family"), round: g("round"),
+    nps: g("nps")===""?"":Number(g("nps")),
+    found: g("found"), pay: g("pay"), best: g("best"),
+    missing: g("missing"), notes: g("notes"), website: g("website")
+  };
+  PARAMS.forEach(([k])=>{ d[k] = g(k)===""?"":Number(g(k)); });
+  return d;
+}
+function mark(el, bad){ el.classList.toggle("bad", bad); }
+function validate(d){
+  const errs = [];
+  mark(f.elements.family, !d.family); if(!d.family) errs.push("שם המשפחה");
+  const nps = $("#npsQ"); mark(nps, d.nps===""); if(d.nps==="") errs.push("שאלת ההמלצה");
+  const fq = $("#foundQ"); mark(fq, !d.found); if(!d.found) errs.push("האם מצאתם לאן לצאת");
+  const rated = PARAMS.filter(([k])=>d[k]!=="").length;
+  mark($("#ratings"), rated<3); if(rated<3) errs.push("לפחות 3 דירוגים");
+  if(!$("#consent").checked) errs.push("אישור שמירת התשובות");
+  return errs;
+}
+function asText(d){
+  const lines = [`סקר "מה בא לי" – ${d.family} (${d.round})`];
+  PARAMS.forEach(([k,t])=>lines.push(`${t}: ${d[k]===""?"–":d[k]}`));
+  lines.push(`המלצה: ${d.nps}/10`,`מצאנו לאן לצאת: ${d.found}`,`נכונות לשלם: ${d.pay||"–"}`,`הכי שימושי: ${d.best||"–"}`);
+  if(d.missing) lines.push(`מה חסר: ${d.missing}`);
+  if(d.notes) lines.push(`הערות: ${d.notes}`);
+  return lines.join("\n");
+}
+function finish(msg){
+  store.clear();
+  f.hidden = true; $("#done").hidden = false;
+  if(msg) $("#doneMsg").textContent = msg;
+  $("#done").focus();
+  $("#barFill").style.width = "100%"; $("#prog").textContent = "נשלח";
+}
+
+f.addEventListener("submit", async e=>{
+  e.preventDefault();
+  const d = collect();
+  const errs = validate(d);
+  if(errs.length){ $("#formErr").textContent = "חסר: " + errs.join(", "); return; }
+  $("#formErr").textContent = "";
+  if(d.website){ finish(); return; } // spam trap
+  const btn = $("#send"); btn.disabled = true; btn.textContent = "שולחים…";
+  if(SURVEY_CONFIG.endpoint){
+    try{
+      await fetch(SURVEY_CONFIG.endpoint, {method:"POST", mode:"no-cors", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(d)});
+      finish(); return;
+    }catch(err){ /* fall through to WhatsApp */ }
+  }
+  if(SURVEY_CONFIG.whatsapp){
+    location.href = `https://wa.me/${SURVEY_CONFIG.whatsapp}?text=${encodeURIComponent(asText(d))}`;
+    finish("נפתחה הודעת וואטסאפ עם התשובות – רק ללחוץ שליחה.");
+    return;
+  }
+  try{ await navigator.clipboard.writeText(asText(d)); finish("התשובות הועתקו. הדביקו ושלחו אותן לנו בהודעה."); }
+  catch(err){ btn.disabled=false; btn.textContent="שליחת הסקר"; $("#formErr").textContent = "לא הצלחנו לשלוח כרגע. נסו שוב מאוחר יותר."; }
+});
+
+/* admin: survey.html?admin=1 – personal links */
+if(qs.get("admin")==="1"){
+  $("#admin").hidden = false;
+  $("#mk").addEventListener("click",()=>{
+    const base = location.origin + location.pathname;
+    const r = $("#aRound").value;
+    const out = $("#out"); out.textContent = "";
+    $("#names").value.split("\n").map(s=>s.trim()).filter(Boolean).forEach(n=>{
+      const url = `${base}?f=${encodeURIComponent(n)}&r=${r}`;
+      const msg = `היי! תודה שהשתתפתם בניסוי של "מה בא לי" 🙏 נשמח ל-3 דקות על איך היה: ${url}`;
+      const li = document.createElement("li");
+      const a = document.createElement("a"); a.href = `https://wa.me/?text=${encodeURIComponent(msg)}`; a.target="_blank"; a.rel="noopener";
+      a.textContent = `שליחה בוואטסאפ – ${n}`;
+      const code = document.createElement("div"); code.textContent = url; code.style.fontSize=".8rem"; code.style.color="var(--muted)"; code.dir="ltr";
+      li.append(a, code); out.append(li);
+    });
+  });
+}
+</script>
+</body>
+</html>
