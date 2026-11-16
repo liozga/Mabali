@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>מה בא לי · לוח בקרה</title>
 <link rel="icon" href="icons/mabali-192.png">
 <style>
@@ -92,12 +93,13 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
   <section id="login" class="card" aria-labelledby="loginT">
     <h2 id="loginT">כניסת מנהל</h2>
     <p class="sub">הנתונים נשמרים בגיליון Google שלכם. הסיסמה היא הערך של ADMIN_KEY שהגדרתם ב-Apps Script.</p>
+    <p id="checking" class="small" hidden role="status">בודקים את החיבור…</p>
     <form id="loginForm">
       <label for="ep">כתובת שרת הניטור (מסתיימת ב-‎/exec)</label>
       <input type="url" id="ep" dir="ltr" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
       <label for="pw">סיסמת מנהל</label>
       <input type="password" id="pw" dir="ltr" autocomplete="current-password">
-      <label class="row" style="font-weight:400"><input type="checkbox" id="remember"> לזכור במכשיר הזה</label>
+      <p class="small">מטעמי אבטחה הסיסמה לא נשמרת. החיבור מתנתק אחרי 15 דקות ללא פעילות, אחרי 8 שעות, או בסגירת הלשונית.</p>
       <p class="err" id="loginErr" role="alert"></p>
       <div class="row"><button class="pri" type="submit" id="loginBtn">כניסה</button><button type="button" id="demoBtn">תצוגה עם נתוני דוגמה</button></div>
     </form>
@@ -143,6 +145,8 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
     </div>
 
     <div class="card"><h2>המלצות על מקומות</h2><p class="sub">מקומות שמשתמשים הציעו להוסיף</p><div class="tbl" id="sugs"></div></div>
+
+    <div class="card"><h2>כניסות ללוח הבקרה</h2><p class="sub">30 האירועים האחרונים: כניסות, יציאות וסיסמאות שגויות. ניסיונות שגויים שלא אתם עשיתם הם סימן להחליף סיסמה.</p><div class="tbl" id="logins"></div></div>
   </section>
 </main>
 <script src="admin.js"></script>

@@ -5,7 +5,7 @@
  *
  * הקמה (פעם אחת):
  *  1. גיליון Google חדש ← הרחבות ← Apps Script. מוחקים את הקוד הקיים, מדביקים את כל הקובץ הזה ושומרים.
- *  2. הגדרות הפרויקט (גלגל השיניים) ← Script properties ← Add: שם ADMIN_KEY, ערך: סיסמה שתבחרו (12 תווים ומעלה).
+ *  2. הגדרות הפרויקט (גלגל השיניים) ← Script properties ← Add: שם ADMIN_KEY, ערך: סיסמה חזקה שתבחרו (12 תווים ומעלה, לא בשימוש במקום אחר).
  *  3. פריסה ← פריסה חדשה ← Web app. Execute as: Me, Who has access: Anyone ← פריסה ← אישור הרשאות.
  *  4. את הכתובת שמסתיימת ב-/exec שמים ב-CONFIG.monitorEndpoint באפליקציה ובלוח הבקרה.
  * אחרי שינוי בקוד: פריסה ← ניהול פריסות ← עריכה ← גרסה חדשה (הכתובת נשארת).
@@ -84,18 +84,42 @@ function notify_(ticket, type, place, text) {
   try { MailApp.sendEmail(to, 'מה בא לי – ' + type + ' ' + ticket, (place ? 'מקום: ' + place + '\n' : '') + text); } catch (e) {}
 }
 
-/* ---------- admin ---------- */
+/* ---------- admin (v1.49.0: sessions instead of a stored password) ----------
+ * login: the password (Script property ADMIN_KEY, 12+ characters) is checked once and exchanged for a random session token.
+ * Only a SHA-256 hash of the token is kept on the server (CacheService). A session ends after 20 minutes without a request,
+ * after 8 hours in any case, or on logout. 10 wrong passwords close the login for 15 minutes. Every login, failure and
+ * logout is written to the sheet "כניסות מנהל". */
+const SES_IDLE = 20 * 60, SES_MAX = 8 * 3600, MAX_FAILS = 10, T_LOG = 'כניסות מנהל', H_LOG = ['זמן', 'אירוע', 'דפדפן'];
+function hash_(t) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(t))); }
+function safeEq_(a, b) { a = String(a); b = String(b); let r = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) r |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return r === 0; }
+function log_(what, ua) { try { sheet_(T_LOG, H_LOG).appendRow([new Date(), what, clean_(ua, 120)]); } catch (e) {} }
+function session_(tok) {
+  if (typeof tok !== 'string' || tok.length < 40) return null;
+  const c = CacheService.getScriptCache(), k = 'ses_' + hash_(tok), v = c.get(k); if (!v) return null;
+  const o = JSON.parse(v); if (Date.now() - o.t0 > SES_MAX * 1000) { c.remove(k); return null; }
+  c.put(k, v, SES_IDLE); return o;                                            // sliding idle timeout
+}
 function admin_(d) {
   const cache = CacheService.getScriptCache();
-  const fails = +(cache.get('adm_fail') || 0);
-  if (fails >= 20) return { ok: false, error: 'locked' };                    // 20 wrong passwords → 15 minutes closed
-  const key = PropertiesService.getScriptProperties().getProperty('ADMIN_KEY');
-  if (!key) return { ok: false, error: 'no admin key' };
-  if (String(d.key || '') !== key) { cache.put('adm_fail', String(fails + 1), 900); return { ok: false, error: 'auth' }; }
-  if (d.op === 'stats') return stats_(Math.max(7, Math.min(90, +d.days || 30)));
+  if (d.op === 'login') {
+    const fails = +(cache.get('adm_fail') || 0);
+    if (fails >= MAX_FAILS) { log_('ניסיון כניסה בזמן חסימה', d.ua); return { ok: false, error: 'locked' }; }
+    const key = PropertiesService.getScriptProperties().getProperty('ADMIN_KEY');
+    if (!key) return { ok: false, error: 'no admin key' };
+    if (key.length < 12) return { ok: false, error: 'weak key' };
+    if (!safeEq_(d.key || '', key)) { cache.put('adm_fail', String(fails + 1), 900); log_('סיסמה שגויה', d.ua); Utilities.sleep(700); return { ok: false, error: 'auth' }; }
+    cache.remove('adm_fail');
+    const tok = (Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    cache.put('ses_' + hash_(tok), JSON.stringify({ t0: Date.now() }), SES_IDLE);
+    log_('כניסה', d.ua);
+    return { ok: true, token: tok, idle: SES_IDLE, max: SES_MAX };
+  }
+  if (!session_(d.token)) return { ok: false, error: 'session' };
+  if (d.op === 'logout') { cache.remove('ses_' + hash_(d.token)); log_('יציאה', d.ua); return { ok: true }; }
+  if (d.op === 'stats') { const s = stats_(Math.max(7, Math.min(90, +d.days || 30))); s.logins = rows_(T_LOG, H_LOG).slice(-30).reverse().map(r => ({ at: r[0] ? new Date(r[0]).toISOString() : '', what: r[1], ua: r[2] })); return s; }
   if (d.op === 'status') return setStatus_(T_REP, 1, String(d.ticket || ''), 10, REP_STATUS, d.status, d.note, 11, 12);
   if (d.op === 'sugStatus') return setStatus_(T_SUG, 0, String(d.row || ''), 16, SUG_STATUS, d.status, d.note, 17, 0);
-  return { ok: true };
+  return { ok: false, error: 'unknown op' };
 }
 function setStatus_(tab, keyCol, keyVal, stCol, allowed, status, note, noteCol, updCol) {
   const sh = sheet_(tab, tab === T_REP ? H_REP : H_SUG);

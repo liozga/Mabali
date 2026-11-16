@@ -4,37 +4,54 @@ const ENDPOINT = "https://script.google.com/macros/s/AKfycbyllqjqUeSGtvhQz6E-b9L
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = new Intl.NumberFormat("he-IL");
-const store = { get(k) { try { return sessionStorage.getItem(k) || localStorage.getItem(k) } catch (e) { return null } },
-  set(k, v, keep) { try { (keep ? localStorage : sessionStorage).setItem(k, v) } catch (e) {} },
-  del(k) { try { sessionStorage.removeItem(k); localStorage.removeItem(k) } catch (e) {} } };
+/* v1.49.0 security: the password is never stored. It is exchanged once for a session token that lives only in this tab
+   (sessionStorage), ends after 15 minutes without activity, after 8 hours, or on "יציאה", and is cancelled on the server too. */
+if (window.top !== window.self) { document.documentElement.innerHTML = ""; throw new Error("framed"); }   // no clickjacking
+const ses = { get() { try { return sessionStorage.getItem("mb_tok") } catch (e) { return null } }, set(v) { try { sessionStorage.setItem("mb_tok", v) } catch (e) {} }, del() { try { sessionStorage.removeItem("mb_tok") } catch (e) {} } };
+try { localStorage.removeItem("mb_key"); sessionStorage.removeItem("mb_key"); } catch (e) {}           // passwords kept by older versions
+const IDLE_MS = 15 * 60000;
 const EV = { open: "פתיחת האפליקציה", tab: "מעבר לשונית", place: "פתיחת פרטי מקום", nav: "ניווט למקום", day_add: "הוספה ליום כיף", visited: "סימון \"ביקרנו\"", share: "שיתוף", calendar: "הוספה ליומן", filter: "שינוי תאריך", tour: "סיור מודרך", family_new: "משפחה חדשה", group: "קבוצות" };
 const TABS = { home: "לוגו (חזרה למסך הראשי)", find: "מה עושים", day: "יום כיף", groups: "קבוצות", hist: "המשפחה", about: "מידע" };
 const ENVS = { web: "דפדפן", pwa: "ממסך הבית" };
 const REP_STATUS = ["חדש", "בטיפול", "טופל", "נדחה"], SUG_STATUS = ["ממתין", "בבדיקה", "אושר – להוסיף", "נדחה", "כבר קיים"];
-const S = { ep: "", key: "", demo: false, data: null, filter: "פתוחות" };
+const S = { ep: "", tok: "", demo: false, data: null, filter: "פתוחות", idleT: 0 };
 
 async function call(op, extra) {
   if (S.demo) return demoCall(op, extra);
-  const r = await fetch(S.ep, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ kind: "admin", key: S.key, op }, extra || {})) });
-  return r.json();
+  const r = await fetch(S.ep, { method: "POST", cache: "no-store", referrerPolicy: "no-referrer", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ kind: "admin", op, ua: navigator.userAgent.slice(0, 120) }, op === "login" ? {} : { token: S.tok }, extra || {})) });
+  const j = await r.json();
+  if (j && j.error === "session" && op !== "logout") endSession("החיבור פג. צריך להזין סיסמה שוב.");
+  return j;
 }
-const ERRS = { auth: "סיסמה שגויה", locked: "יותר מדי ניסיונות שגויים. נסו שוב בעוד 15 דקות.", "no admin key": "לא הוגדרה סיסמה בשרת: ב-Apps Script ← הגדרות הפרויקט ← Script properties מוסיפים ADMIN_KEY." };
+const ERRS = { auth: "סיסמה שגויה", locked: "יותר מדי ניסיונות שגויים. הכניסה חסומה ל-15 דקות.", "weak key": "הסיסמה בשרת קצרה מ-12 תווים. החליפו את ADMIN_KEY בסיסמה חזקה יותר.", legacy: "שרת הניטור בגרסה ישנה. הדביקו את monitor.gs החדש ב-Apps Script ועדכנו את הפריסה לגרסה חדשה.", "no admin key": "לא הוגדרה סיסמה בשרת: ב-Apps Script ← הגדרות הפרויקט ← Script properties מוסיפים ADMIN_KEY." };
 
 /* ---------- login ---------- */
-$("#ep").value = store.get("mb_ep") || ENDPOINT;
+$("#ep").value = (() => { try { return localStorage.getItem("mb_ep") } catch (e) { return null } })() || ENDPOINT;
 $("#loginForm").addEventListener("submit", async e => {
   e.preventDefault(); const ep = $("#ep").value.trim(), key = $("#pw").value;
   $("#loginErr").textContent = "";
   if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(ep)) { $("#loginErr").textContent = "כתובת השרת צריכה להתחיל ב-https://script.google.com/"; $("#ep").focus(); return; }
   if (!key) { $("#loginErr").textContent = "חסרה סיסמה"; $("#pw").focus(); return; }
-  Object.assign(S, { ep, key, demo: false });
+  Object.assign(S, { ep, demo: false });
   $("#loginBtn").disabled = true; $("#loginBtn").textContent = "בודקים…";
-  const ok = await load(true);
+  let r; try { r = await call("login", { key }); } catch (err) { r = { ok: false, error: "net" }; }
+  $("#pw").value = "";                                                       // the password leaves the page right away
   $("#loginBtn").disabled = false; $("#loginBtn").textContent = "כניסה";
-  if (ok) { const keep = $("#remember").checked; store.set("mb_ep", ep, true); store.set("mb_key", key, keep); }
+  if (!r || !r.ok || !r.token) { $("#loginErr").textContent = ERRS[r && r.ok && !r.token ? "legacy" : r && r.error] || "אין חיבור לשרת הניטור. בדקו את הכתובת ושהפריסה היא Web app עם גישה ל-Anyone."; $("#pw").focus(); return; }
+  S.tok = r.token; ses.set(r.token); try { localStorage.setItem("mb_ep", ep) } catch (e) {}
+  await load(true);
 });
+function endSession(msg) {
+  clearTimeout(S.idleT); ses.del(); Object.assign(S, { tok: "", data: null, demo: false });
+  ["#kpis", "#reps", "#events", "#tabs", "#places", "#errors", "#versions", "#envs", "#sugs", "#dailyTbl", "#logins"].forEach(x => { const e = $(x); if (e) e.innerHTML = ""; });
+  document.querySelectorAll("#dailyWrap svg").forEach(e => e.remove());
+  $("#dash").hidden = true; $("#login").hidden = false; $("#loginForm").hidden = false; $("#checking").hidden = true; $("#updated").textContent = "";
+  $("#loginErr").textContent = msg || ""; $("#pw").value = ""; $("#pw").focus();
+}
+function touchIdle() { if (!S.tok && !S.demo) return; clearTimeout(S.idleT); S.idleT = setTimeout(async () => { if (S.tok) { try { await call("logout") } catch (e) {} } endSession("נותקת אחרי 15 דקות ללא פעילות."); }, IDLE_MS); }
+["pointerdown", "keydown", "scroll", "touchstart"].forEach(ev => addEventListener(ev, touchIdle, { passive: true }));
 $("#demoBtn").addEventListener("click", () => { Object.assign(S, { demo: true }); load(true); });
-$("#logout").addEventListener("click", () => { store.del("mb_key"); Object.assign(S, { key: "", data: null, demo: false }); $("#pw").value = ""; $("#dash").hidden = true; $("#login").hidden = false; $("#updated").textContent = ""; $("#pw").focus(); });
+$("#logout").addEventListener("click", async () => { if (S.tok) { try { await call("logout") } catch (e) {} } endSession("יצאת מלוח הבקרה."); });
 $("#refresh").addEventListener("click", () => load());
 $("#range").addEventListener("change", () => load());
 
@@ -46,10 +63,11 @@ async function load(fromLogin) {
   if (!d || !d.ok) {
     const msg = ERRS[d && d.error] || "אין חיבור לשרת הניטור. בדקו את הכתובת ושהפריסה היא Web app עם גישה ל-Anyone.";
     $("#updated").textContent = "";
+    if (d && d.error === "session") return false;
     if (fromLogin || $("#dash").hidden) { $("#loginErr").textContent = msg; } else { $("#updated").textContent = msg; }
     return false;
   }
-  S.data = d; $("#login").hidden = true; $("#dash").hidden = false; $("#demoNote").hidden = !S.demo;
+  S.data = d; $("#login").hidden = true; $("#dash").hidden = false; $("#demoNote").hidden = !S.demo; touchIdle();
   $("#updated").textContent = "עודכן " + new Date(d.now).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
   render(); return true;
 }
@@ -67,7 +85,7 @@ function render() {
   hbars("#tabs", d.tabs.map(([k, v]) => [TABS[k] || k, v]));
   hbars("#versions", d.versions);
   hbars("#envs", d.envs.map(([k, v]) => [ENVS[k] || k, v]));
-  places(d.places); errors(d.errors); reports(); sugs(d.suggestions);
+  places(d.places); errors(d.errors); reports(); sugs(d.suggestions); logins(d.logins || []);
 }
 function hbars(sel, rows) {
   const el = $(sel); if (!rows.length) { el.innerHTML = '<li class="empty">אין נתונים בתקופה</li>'; return; }
@@ -140,6 +158,9 @@ $("#sugs").addEventListener("change", async e => {
 });
 let rsT; addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.data) daily(S.data.daily); }, 150); });
 
+function logins(rows) {
+  $("#logins").innerHTML = rows.length ? `<table><thead><tr><th>זמן</th><th>אירוע</th><th>דפדפן</th></tr></thead><tbody>${rows.map(r => `<tr><td>${when(r.at)}</td><td>${/שגויה|חסימה/.test(r.what) ? `<span class="pill st-חדש">${esc(r.what)}</span>` : esc(r.what)}</td><td class="small" dir="ltr" style="text-align:left">${esc(String(r.ua || "").slice(0, 70))}</td></tr>`).join("")}</tbody></table>` : '<p class="empty">אין רישומים</p>';
+}
 /* ---------- demo data ---------- */
 let DEMO = null;
 function demoCall(op, x) {
@@ -163,8 +184,11 @@ function demoCall(op, x) {
     versions: [["1.43.0", 71], ["1.42.2", 22], ["1.42.1", 6]], envs: [["web", 74], ["pwa", 25]],
     reports: DEMO.reports,
     errors: [{ msg: "TypeError: Cannot read properties of null (reading 'focus')", src: "index.html:3121:40", n: 6, users: 3, last: iso(5), ver: "1.43.0" }],
+    logins: [{ at: iso(1), what: "כניסה", ua: "Mozilla/5.0 (iPhone…)" }, { at: iso(26), what: "סיסמה שגויה", ua: "Mozilla/5.0 (Windows…)" }],
     suggestions: [{ row: 2, at: iso(20), name: "פארק גלי צ׳כוסלובקיה", city: "קריית ים", type: "פארק או גינה", link: "", why: "גינה מוצלת עם מתקנים לפעוטות", status: "ממתין", note: "" }] };
 }
 
-/* ---------- auto sign-in on this device ---------- */
-(() => { const ep = store.get("mb_ep"), key = store.get("mb_key"); if (ep && key) { Object.assign(S, { ep, key }); $("#ep").value = ep; load(); } })();
+/* ---------- an open session in this tab survives a page reload; nothing else is remembered ---------- */
+(async () => { const tok = ses.get(), ep = $("#ep").value; if (!tok || !ep) return;
+  Object.assign(S, { ep, tok }); $("#loginForm").hidden = true; $("#checking").hidden = false;     // no form to click while checking
+  const ok = await load(); if (!ok) endSession(S.tok ? "" : "החיבור פג. צריך להזין סיסמה שוב."); })();
