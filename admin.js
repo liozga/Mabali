@@ -8,7 +8,7 @@ const store = { get(k) { try { return sessionStorage.getItem(k) || localStorage.
   set(k, v, keep) { try { (keep ? localStorage : sessionStorage).setItem(k, v) } catch (e) {} },
   del(k) { try { sessionStorage.removeItem(k); localStorage.removeItem(k) } catch (e) {} } };
 const EV = { open: "פתיחת האפליקציה", tab: "מעבר לשונית", place: "פתיחת פרטי מקום", nav: "ניווט למקום", day_add: "הוספה ליום כיף", visited: "סימון \"ביקרנו\"", share: "שיתוף", calendar: "הוספה ליומן", filter: "שינוי תאריך", tour: "סיור מודרך", family_new: "משפחה חדשה", group: "קבוצות" };
-const TABS = { find: "מה עושים", day: "יום כיף", groups: "קבוצות", hist: "המשפחה", about: "מידע" };
+const TABS = { home: "לוגו (חזרה למסך הראשי)", find: "מה עושים", day: "יום כיף", groups: "קבוצות", hist: "המשפחה", about: "מידע" };
 const ENVS = { web: "דפדפן", pwa: "ממסך הבית" };
 const REP_STATUS = ["חדש", "בטיפול", "טופל", "נדחה"], SUG_STATUS = ["ממתין", "בבדיקה", "אושר – להוסיף", "נדחה", "כבר קיים"];
 const S = { ep: "", key: "", demo: false, data: null, filter: "פתוחות" };
