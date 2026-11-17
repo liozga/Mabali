@@ -1,6 +1,6 @@
 /* מה בא לי – לוח בקרה (v1.43.0). Reads summaries from the monitoring web app (monitor.gs) with the admin password. */
 "use strict";
-const ENDPOINT = "https://script.google.com/macros/s/AKfycbyllqjqUeSGtvhQz6E-b9LJRFQjMuB6MLRPnpQjjAw5eZUZ1lfZ6vH45xkTjeFT5spN/exec";   // optional: the /exec address, so it doesn't need to be typed on every device
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbyYGa4tGk3wNqetggcqH-ssOrMyZp-8LKPNiV_Yhm1ScBDMwAXcqO0nYRGCdvHjsD4n/exec";   // optional: the /exec address, so it doesn't need to be typed on every device
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = new Intl.NumberFormat("he-IL");
@@ -26,7 +26,7 @@ async function call(op, extra) {
 const ERRS = { auth: "סיסמה שגויה", locked: "יותר מדי ניסיונות שגויים. הכניסה חסומה ל-15 דקות.", "weak key": "הסיסמה בשרת קצרה מ-12 תווים. החליפו את ADMIN_KEY בסיסמה חזקה יותר.", legacy: "שרת הניטור בגרסה ישנה. הדביקו את monitor.gs החדש ב-Apps Script ועדכנו את הפריסה לגרסה חדשה.", "no admin key": "לא הוגדרה סיסמה בשרת: ב-Apps Script ← הגדרות הפרויקט ← Script properties מוסיפים ADMIN_KEY." };
 
 /* ---------- login ---------- */
-$("#ep").value = (() => { try { return localStorage.getItem("mb_ep") } catch (e) { return null } })() || ENDPOINT;
+$("#ep").value = ENDPOINT || (() => { try { return localStorage.getItem("mb_ep") } catch (e) { return null } })() || "";   // the published address wins over one typed earlier
 $("#loginForm").addEventListener("submit", async e => {
   e.preventDefault(); const ep = $("#ep").value.trim(), key = $("#pw").value;
   $("#loginErr").textContent = "";
