@@ -13,7 +13,7 @@
 const TZ = 'Asia/Jerusalem';
 const T_EV = 'אירועים', T_REP = 'דיווחים', T_ERR = 'שגיאות', T_SUG = 'המלצות מקומות';
 const H_EV = ['זמן', 'מזהה מכשיר', 'ביקור', 'אירוע', 'פרט', 'גרסה', 'סביבה', 'מסך'];
-const H_REP = ['מספר', 'התקבל', 'סוג', 'מקום', 'תיאור', 'ליצירת קשר', 'פרטים טכניים', 'גרסה', 'מזהה מכשיר', 'סטטוס', 'הערות מנהל', 'עודכן'];
+const H_REP = ['מספר', 'התקבל', 'סוג', 'מקום', 'תיאור', 'ליצירת קשר', 'פרטים טכניים', 'גרסה', 'מזהה מכשיר', 'סטטוס', 'הערות מנהל', 'עודכן', 'מזהה מקום'];
 const H_ERR = ['זמן', 'מזהה מכשיר', 'הודעה', 'מקור', 'גרסה', 'דפדפן'];
 const H_SUG = ['התקבל', 'שם המקום', 'יישוב/כתובת', 'סוג', 'קישור', 'בפנים/בחוץ', 'מחיר מבוגר', 'מחיר ילד', 'גילאים', 'כלבים', 'נגישות', 'למה ממליצים', 'איש קשר', 'משפחה', 'גרסה', 'סטטוס', 'הערות שלי'];
 const REP_STATUS = ['חדש', 'בטיפול', 'טופל', 'נדחה'];
@@ -22,7 +22,10 @@ const REP_TYPES = ['תקלה', 'שאלה', 'בקשה', 'משוב', 'טעות ב�
 const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'calendar', 'filter', 'tour', 'family_new', 'group'];
 
 /* ---------- entry points ---------- */
-function doGet() { return out_({ ok: true, app: 'mabali-monitor', v: "1.43.0" }); }
+function doGet(e) {
+  if (e && e.parameter && e.parameter.op === 'ov') return out_(ovPublic_());   // place corrections, read by the app (public data only)
+  return out_({ ok: true, app: 'mabali-monitor', v: '1.52.0' });
+}
 
 function doPost(e) {
   let d;
@@ -60,7 +63,8 @@ function report_(d) {
   const type = REP_TYPES.indexOf(d.type) >= 0 ? d.type : 'משוב';
   const sh = sheet_(T_REP, H_REP);
   const ticket = 'R-' + String(Math.max(0, sh.getLastRow() - 1) + 1001);
-  sh.appendRow([ticket, new Date(), type, clean_(d.place, 80), text, clean_(d.contact, 80), clean_(d.diag, 400), clean_(d.ver, 12), clean_(d.id, 40), 'חדש', '', '']);
+  const pid = Math.round(+d.placeId) > 0 ? Math.round(+d.placeId) : '';
+  sh.appendRow([ticket, new Date(), type, clean_(d.place, 80), text, clean_(d.contact, 80), clean_(d.diag, 400), clean_(d.ver, 12), clean_(d.id, 40), 'חדש', '', '', pid]);
   sh.getRange(sh.getLastRow(), 10).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(REP_STATUS, true).build());
   notify_(ticket, type, d.place, text);
   return { ok: true, ticket: ticket };
@@ -119,6 +123,9 @@ function admin_(d) {
   if (d.op === 'stats') { const s = stats_(Math.max(7, Math.min(90, +d.days || 30))); s.logins = rows_(T_LOG, H_LOG).slice(-30).reverse().map(r => ({ at: r[0] ? new Date(r[0]).toISOString() : '', what: r[1], ua: r[2] })); return s; }
   if (d.op === 'status') return setStatus_(T_REP, 1, String(d.ticket || ''), 10, REP_STATUS, d.status, d.note, 11, 12);
   if (d.op === 'sugStatus') return setStatus_(T_SUG, 0, String(d.row || ''), 16, SUG_STATUS, d.status, d.note, 17, 0);
+  if (d.op === 'placeSave') return placeSave_(d);
+  if (d.op === 'placeReset') return placeReset_(d);
+  if (d.op === 'repDelete') return repDelete_(d);
   return { ok: false, error: 'unknown op' };
 }
 function setStatus_(tab, keyCol, keyVal, stCol, allowed, status, note, noteCol, updCol) {
@@ -153,7 +160,7 @@ function stats_(days) {
   for (let i = days - 1; i >= 0; i--) { const dd = day_(now.getTime() - i * 864e5); daily.push({ d: dd, u: Object.keys(dayU[dd] || {}).length, s: Object.keys(dayS[dd] || {}).length }); }
   const cnt = o => Object.keys(o).length, sortObj = (o, f) => Object.keys(o).map(k => [k, f(o[k])]).sort((a, b) => b[1] - a[1]);
   const returning = Object.keys(uDays).filter(id => cnt(uDays[id]) >= 2).length;
-  const reps = rows_(T_REP, H_REP).slice(-300).reverse().map(r => ({ ticket: r[0], at: r[1] ? new Date(r[1]).toISOString() : '', type: r[2], place: r[3], text: r[4], contact: r[5], diag: r[6], ver: r[7], status: r[9] || 'חדש', note: r[10] }));
+  const reps = rows_(T_REP, H_REP).slice(-300).reverse().map(r => ({ ticket: r[0], at: r[1] ? new Date(r[1]).toISOString() : '', type: r[2], place: r[3], text: r[4], contact: r[5], diag: r[6], ver: r[7], status: r[9] || 'חדש', note: r[10], pid: r[12] || '' }));
   const errAgg = {};
   rows_(T_ERR, H_ERR).filter(r => new Date(r[0]).getTime() >= since).forEach(r => {
     const k = r[2] + ' @ ' + r[3]; const a = errAgg[k] = errAgg[k] || { msg: r[2], src: r[3], n: 0, users: {}, last: 0, ver: r[4] };
@@ -170,6 +177,58 @@ function stats_(days) {
     versions: sortObj(ver, cnt), envs: sortObj(env, cnt),
     reports: reps, errors: errors, suggestions: sugs
   };
+}
+
+/* ---------- place corrections from the dashboard (v1.52.0) ----------
+ * Sheet "עריכות מקומות": one row per edited or hidden place. The app reads them (doGet ?op=ov) when it opens and applies
+ * them on top of its built-in data. Only the fields below can be changed, each checked by type and length. */
+const T_OV = 'עריכות מקומות', H_OV = ['מזהה', 'שם', 'שינויים', 'מוסתר', 'עודכן', 'הערת מנהל'];
+const KINDS_OK = ['park', 'water', 'nature', 'animals', 'pick', 'play', 'museum', 'culture', 'market'];
+const OV_FIELDS = { n: ['s', 80], c: ['s', 60], k: ['e', KINDS_OK], io: ['e', ['in', 'out']], a: ['n', 0, 5000], ch: ['n', 0, 5000], fu: ['n', 0, 18], cm: ['n', 0, 18],
+  hr: ['s', 200], web: ['u'], note: ['s', 500], dog: ['e', [0, 1, null]], dogN: ['s', 120], acc: ['e', [0, 1, 2, null]], fd: ['s', 120] };
+function ovClean_(f) {
+  const o = {}; if (!f || typeof f !== 'object') return o;
+  Object.keys(OV_FIELDS).forEach(k => {
+    if (!(k in f)) return; const r = OV_FIELDS[k], v = f[k];
+    if (r[0] === 's') o[k] = String(v == null ? '' : v).replace(/[<>]/g, '').trim().slice(0, r[1]);
+    else if (r[0] === 'n') { if (v === '' || v == null || isNaN(+v)) return; o[k] = Math.max(r[1], Math.min(r[2], Math.round(+v * 10) / 10)); }
+    else if (r[0] === 'u') { const u = String(v || '').trim(); if (u === '' || /^https:\/\/[^\s"'<>]+$/.test(u)) o[k] = u.slice(0, 300); }
+    else if (r[0] === 'e') { const x = (v === '' || v == null) ? null : (typeof r[1][0] === 'number' ? +v : v); if (r[1].indexOf(x) >= 0) o[k] = x; }
+  });
+  if (o.n === '') delete o.n;
+  return o;
+}
+function ovPublic_() {
+  const c = CacheService.getScriptCache(), hit = c.get('ov_json'); if (hit) return JSON.parse(hit);
+  const ov = {}, hid = []; let v = 0;
+  rows_(T_OV, H_OV).forEach(r => {
+    const id = Math.round(+r[0]); if (!(id > 0)) return; let f = {}; try { f = ovClean_(JSON.parse(r[2] || '{}')); } catch (e) {}
+    if (Object.keys(f).length) ov[id] = f; if (r[3] === 'כן') hid.push(id);
+    const t = r[4] ? new Date(r[4]).getTime() : 0; if (t > v) v = t;
+  });
+  const o = { ok: true, v: v, ov: ov, hid: hid }; c.put('ov_json', JSON.stringify(o), 300); return o;
+}
+function ovFind_(sh, id) { const n = sh.getLastRow() - 1; if (n < 1) return 0; const ids = sh.getRange(2, 1, n, 1).getValues(); for (let i = 0; i < ids.length; i++) if (Math.round(+ids[i][0]) === id) return i + 2; return 0; }
+function placeSave_(d) {
+  const id = Math.round(+d.id); if (!(id > 0)) return { ok: false, error: 'bad id' };
+  const f = ovClean_(d.fields), sh = sheet_(T_OV, H_OV), row = ovFind_(sh, id);
+  const vals = [id, clean_(d.name, 80), JSON.stringify(f), d.hidden ? 'כן' : 'לא', new Date(), clean_(d.note, 300)];
+  if (row) sh.getRange(row, 1, 1, H_OV.length).setValues([vals]); else sh.appendRow(vals);
+  CacheService.getScriptCache().remove('ov_json');
+  log_((d.hidden ? 'הסתרת מקום: ' : 'עריכת מקום: ') + clean_(d.name, 60), d.ua);
+  return { ok: true, fields: f };
+}
+function placeReset_(d) {
+  const id = Math.round(+d.id), sh = sheet_(T_OV, H_OV), row = ovFind_(sh, id);
+  if (row) sh.deleteRow(row);
+  CacheService.getScriptCache().remove('ov_json'); log_('החזרת מקום לנתונים המקוריים: ' + clean_(d.name, 60), d.ua);
+  return { ok: true };
+}
+function repDelete_(d) {
+  const sh = sheet_(T_REP, H_REP), n = sh.getLastRow() - 1, t = String(d.ticket || ''); if (n < 1 || !t) return { ok: false, error: 'not found' };
+  const ids = sh.getRange(2, 1, n, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (ids[i][0] === t) { sh.deleteRow(i + 2); log_('מחיקת פנייה ' + t, d.ua); return { ok: true }; }
+  return { ok: false, error: 'not found' };
 }
 
 /* ---------- helpers ---------- */

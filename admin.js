@@ -42,7 +42,7 @@ $("#loginForm").addEventListener("submit", async e => {
   await load(true);
 });
 function endSession(msg) {
-  clearTimeout(S.idleT); ses.del(); Object.assign(S, { tok: "", data: null, demo: false });
+  clearTimeout(S.idleT); try { PL.ov = { ov: {}, hid: [] }; PL.list = null; PL.loading = null; $("#plList").innerHTML = ""; $("#plQ").value = ""; $("#edWrap").hidden = true; } catch (e) {} ses.del(); Object.assign(S, { tok: "", data: null, demo: false });
   ["#kpis", "#reps", "#events", "#tabs", "#places", "#errors", "#versions", "#envs", "#sugs", "#dailyTbl", "#logins"].forEach(x => { const e = $(x); if (e) e.innerHTML = ""; });
   document.querySelectorAll("#dailyWrap svg").forEach(e => e.remove());
   $("#dash").hidden = true; $("#login").hidden = false; $("#loginForm").hidden = false; $("#checking").hidden = true; $("#updated").textContent = "";
@@ -134,7 +134,7 @@ function reports() {
   $("#reps").innerHTML = rows.length ? `<table><thead><tr><th>מספר</th><th>התקבל</th><th>סוג</th><th>מקום</th><th>תיאור</th><th>סטטוס והערה</th></tr></thead><tbody>${rows.map(r => `<tr>
     <td>${esc(r.ticket)}</td><td>${when(r.at)}</td><td>${esc(r.type)}</td><td>${esc(r.place)}</td>
     <td><div class="rep-text">${esc(r.text)}</div>${r.contact ? `<div class="small">ליצירת קשר: ${esc(r.contact)}</div>` : ""}${r.diag ? `<details><summary>פרטים טכניים</summary><div class="small" dir="ltr" style="text-align:left">${esc(r.diag)}</div></details>` : ""}</td>
-    <td><span class="pill st-${esc(r.status)}">${esc(r.status)}</span><div class="rep-edit" style="margin-top:6px"><select aria-label="סטטוס ${esc(r.ticket)}" data-st="${esc(r.ticket)}">${REP_STATUS.map(s => `<option${s === r.status ? " selected" : ""}>${s}</option>`).join("")}</select><textarea aria-label="הערה ל-${esc(r.ticket)}" data-note="${esc(r.ticket)}" placeholder="הערה">${esc(r.note)}</textarea><button type="button" data-save="${esc(r.ticket)}">שמירה</button></div></td></tr>`).join("")}</tbody></table>` : '<p class="empty">אין פניות בסינון הזה</p>';
+    <td><span class="pill st-${esc(r.status)}">${esc(r.status)}</span><div class="rep-edit" style="margin-top:6px"><select aria-label="סטטוס ${esc(r.ticket)}" data-st="${esc(r.ticket)}">${REP_STATUS.map(s => `<option${s === r.status ? " selected" : ""}>${s}</option>`).join("")}</select><textarea aria-label="הערה ל-${esc(r.ticket)}" data-note="${esc(r.ticket)}" placeholder="הערה">${esc(r.note)}</textarea><button type="button" data-save="${esc(r.ticket)}">שמירה</button></div><div class="acts" style="margin-top:6px">${r.place || r.pid ? `<button type="button" data-fix="${esc(r.ticket)}">תיקון המקום</button>` : ""}<button type="button" class="danger" data-del="${esc(r.ticket)}">מחיקת הפנייה<span class="sr"> ${esc(r.ticket)}</span></button></div></td></tr>`).join("")}</tbody></table>` : '<p class="empty">אין פניות בסינון הזה</p>';
 }
 $("#repFilter").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.filter = b.dataset.f; reports(); });
 $("#reps").addEventListener("click", async e => {
@@ -161,11 +161,137 @@ let rsT; addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(
 function logins(rows) {
   $("#logins").innerHTML = rows.length ? `<table><thead><tr><th>זמן</th><th>אירוע</th><th>דפדפן</th></tr></thead><tbody>${rows.map(r => `<tr><td>${when(r.at)}</td><td>${/שגויה|חסימה/.test(r.what) ? `<span class="pill st-חדש">${esc(r.what)}</span>` : esc(r.what)}</td><td class="small" dir="ltr" style="text-align:left">${esc(String(r.ua || "").slice(0, 70))}</td></tr>`).join("")}</tbody></table>` : '<p class="empty">אין רישומים</p>';
 }
+/* ---------- places: search, quick edit, hide (v1.52.0) ---------- */
+const KINDS = [["park", "פארקים וגינות"], ["water", "מים ובריכות"], ["nature", "טבע ומסלולים"], ["animals", "חיות"], ["pick", "קטיף"], ["play", "משחקיות ואטרקציות"], ["museum", "מוזיאונים"], ["culture", "תרבות ומורשת"], ["market", "שווקים"]];
+const KIND = Object.fromEntries(KINDS);
+const ED_FIELDS = [
+  ["n", "שם המקום", "text", 80], ["c", "יישוב", "text", 60],
+  ["k", "סוג", "sel", KINDS], ["io", "בפנים או בחוץ", "sel", [["out", "בחוץ"], ["in", "בפנים"]]],
+  ["a", "מחיר מבוגר (₪)", "num", [0, 5000]], ["ch", "מחיר ילד/ה (₪)", "num", [0, 5000]],
+  ["fu", "ילדים בחינם עד גיל", "num", [0, 18]], ["cm", "מחיר ילד/ה עד גיל", "num", [0, 18]],
+  ["hr", "שעות פתיחה", "text", 200, "wide"], ["web", "אתר (https://…)", "url", 300, "wide"],
+  ["dog", "כלבים", "sel", [["", "לא ידוע"], ["1", "מותר"], ["0", "אסור"]]], ["dogN", "הערה על כלבים", "text", 120],
+  ["acc", "נגישות", "sel", [["", "לא ידוע"], ["2", "נגיש לכיסא גלגלים"], ["1", "נגיש לעגלות בלבד"], ["0", "לא נגיש"]]], ["fd", "אוכל במקום", "text", 120],
+  ["note", "הערה שמוצגת בכרטיס", "area", 500, "wide"]];
+const PL = { list: null, def: {}, ov: { ov: {}, hid: [] }, f: "all", cur: null, rep: null, loading: null };
+async function plLoad() {
+  if (PL.list) return true; if (PL.loading) return PL.loading;
+  PL.loading = (async () => {
+    $("#plMsg").textContent = "טוען את רשימת המקומות…";
+    try { const r = await fetch("places.json?v=" + Date.now(), { cache: "no-cache" }); const j = await r.json(); PL.list = j.places; PL.def = j.def || {}; }
+    catch (e) { $("#plMsg").textContent = "לא הצלחנו לטעון את רשימת המקומות (places.json)."; PL.loading = null; return false; }
+    if (!S.demo) { try { const r = await fetch(S.ep + "?op=ov&t=" + Date.now(), { cache: "no-store" }); const j = await r.json(); if (j && j.ok) PL.ov = { ov: j.ov || {}, hid: j.hid || [] }; } catch (e) {} }
+    $("#plMsg").textContent = `${nf.format(PL.list.length)} מקומות. נערכו: ${Object.keys(PL.ov.ov).length}, מוסתרים: ${PL.ov.hid.length}.`;
+    return true;
+  })();
+  return PL.loading;
+}
+const plOrig = (p, k) => (p[k] !== undefined ? p[k] : (k in PL.def ? PL.def[k] : ""));
+const plCur = (p, k) => { const o = PL.ov.ov[p.id]; return o && k in o ? o[k] : plOrig(p, k); };
+const plHidden = p => PL.ov.hid.indexOf(p.id) >= 0;
+const plEdited = p => !!PL.ov.ov[p.id] && Object.keys(PL.ov.ov[p.id]).length > 0;
+const normH = s => String(s || "").toLowerCase().replace(/["'׳״`\-–]/g, "").replace(/\s+/g, " ").trim();
+function plFindByName(name) { const n = normH(name); if (!n || !PL.list) return null; return PL.list.find(p => normH(plCur(p, "n")) === n || normH(p.n) === n) || null; }
+function plRender() {
+  if (!PL.list) return; const q = normH($("#plQ").value);
+  let rows = PL.list;
+  if (PL.f === "edited") rows = rows.filter(plEdited); else if (PL.f === "hidden") rows = rows.filter(plHidden);
+  if (q.length >= 2) rows = rows.filter(p => normH(plCur(p, "n") + " " + plCur(p, "c")).includes(q));
+  else if (PL.f === "all") { $("#plList").innerHTML = '<p class="empty">הקלידו לפחות 2 אותיות לחיפוש</p>'; return; }
+  const tot = rows.length; rows = rows.slice(0, 40);
+  const price = p => { const a = plCur(p, "a"), c = plCur(p, "ch"); return !a && !c ? "חינם" : `מבוגר ₪${a || 0} · ילד/ה ₪${c || 0}`; };
+  $("#plList").innerHTML = rows.length ? `<table><thead><tr><th>מקום</th><th>יישוב</th><th>סוג</th><th>מחיר</th><th>פעולות</th></tr></thead><tbody>${rows.map(p => `<tr>
+    <td>${esc(plCur(p, "n"))} ${plEdited(p) ? '<span class="pill ed">נערך</span>' : ""} ${plHidden(p) ? '<span class="pill hid">מוסתר</span>' : ""}${p.osm ? ' <span class="small">(OpenStreetMap)</span>' : ""}</td>
+    <td>${esc(plCur(p, "c"))}</td><td>${esc(KIND[plCur(p, "k")] || "")}</td><td>${esc(price(p))}</td>
+    <td><div class="acts"><button type="button" data-ed="${p.id}">עריכה<span class="sr"> ${esc(plCur(p, "n"))}</span></button><button type="button" class="${plHidden(p) ? "" : "danger"}" data-hide="${p.id}">${plHidden(p) ? "החזרה לאפליקציה" : "הסתרה"}<span class="sr"> ${esc(plCur(p, "n"))}</span></button></div></td></tr>`).join("")}</tbody></table>${tot > 40 ? `<p class="small">מוצגים 40 מתוך ${nf.format(tot)}. דייקו את החיפוש.</p>` : ""}` : '<p class="empty">לא נמצאו מקומות</p>';
+}
+let plT; $("#plQ").addEventListener("input", async () => { await plLoad(); clearTimeout(plT); plT = setTimeout(plRender, 150); });
+$("#plQ").addEventListener("focus", () => plLoad(), { once: true });
+$("#plFilter").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return; PL.f = b.dataset.f; $("#plFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); await plLoad(); plRender(); });
+$("#plList").addEventListener("click", async e => {
+  const ed = e.target.closest("[data-ed]"), hd = e.target.closest("[data-hide]");
+  if (ed) { edOpen(+ed.dataset.ed, null, ed); return; }
+  if (hd) { const p = PL.list.find(x => x.id === +hd.dataset.hide); if (!p) return; hd.disabled = true; await plSave(p, PL.ov.ov[p.id] || {}, !plHidden(p), ""); hd.disabled = false; plRender(); }
+});
+async function plSave(p, fields, hidden, note) {
+  const empty = !Object.keys(fields).length && !hidden;
+  let r; try { r = await call(empty ? "placeReset" : "placeSave", { id: p.id, name: plCur(p, "n"), fields, hidden, note }); } catch (e) { r = null; }
+  if (!r || !r.ok) { $("#updated").textContent = "השמירה נכשלה, נסו שוב"; return false; }
+  if (empty) delete PL.ov.ov[p.id]; else PL.ov.ov[p.id] = r.fields || fields;
+  PL.ov.hid = PL.ov.hid.filter(x => x !== p.id); if (hidden) PL.ov.hid.push(p.id);
+  $("#updated").textContent = `${plCur(p, "n")}: ${empty ? "חזר לנתונים המקוריים" : hidden ? "מוסתר מהאפליקציה" : "נשמר"}`;
+  return true;
+}
+/* editor */
+function edVal(p, k) { const v = plCur(p, k); return v == null ? "" : String(v); }
+async function edOpen(id, rep, from) {
+  await plLoad(); const p = PL.list && PL.list.find(x => x.id === id); if (!p) { $("#updated").textContent = "המקום לא נמצא ברשימה"; return; }
+  PL.cur = p; PL.rep = rep || null; PL.from = from || document.activeElement;
+  $("#edT").textContent = "עריכת מקום: " + plCur(p, "n"); $("#edSub").textContent = `מזהה ${p.id}${p.osm ? " · מקור: OpenStreetMap" : ""} · השינויים מגיעים לכל המשתמשים בפתיחה הבאה של האפליקציה`;
+  $("#edRep").hidden = !rep; if (rep) $("#edRep").textContent = `דיווח ${rep.ticket}: ${rep.text}`;
+  $("#edForm").innerHTML = ED_FIELDS.map(([k, l, t, o, w]) => {
+    const v = edVal(p, k), orig = plOrig(p, k), ch = PL.ov.ov[p.id] && k in PL.ov.ov[p.id];
+    const ctl = t === "sel" ? `<select id="ed_${k}">${o.map(([a, b]) => `<option value="${esc(a)}"${String(v) === a ? " selected" : ""}>${esc(b)}</option>`).join("")}</select>`
+      : t === "area" ? `<textarea id="ed_${k}" maxlength="${o}">${esc(v)}</textarea>`
+      : t === "num" ? `<input type="number" id="ed_${k}" min="${o[0]}" max="${o[1]}" step="1" inputmode="numeric" value="${esc(v)}">`
+      : `<input type="${t === "url" ? "url" : "text"}" id="ed_${k}" maxlength="${o}" value="${esc(v)}"${t === "url" ? ' dir="ltr"' : ""}>`;
+    const ov = t === "sel" ? (o.find(x => x[0] === String(orig == null ? "" : orig)) || ["", ""])[1] : orig;
+    return `<div class="${w || ""}"><label for="ed_${k}">${esc(l)}</label>${ctl}<div class="orig" id="edo_${k}">${ch ? "מקורי: " + esc(ov === "" ? "(ריק)" : ov) : ""}</div></div>`;
+  }).join("");
+  $("#edHidden").checked = plHidden(p); $("#edNote").value = ""; $("#edErr").textContent = "";
+  $("#edReset").hidden = !(plEdited(p) || plHidden(p));
+  $("#edDoneRow").hidden = !rep; if (rep) { $("#edDone").checked = true; $("#edDoneT").textContent = `לסמן את פנייה ${rep.ticket} כ"טופל"`; }
+  $("#edWrap").hidden = false; $("#edT").focus();
+}
+function edClose() { $("#edWrap").hidden = true; const f = PL.from; PL.cur = null; if (f && f.isConnected) f.focus(); }
+function edCollect() {
+  const p = PL.cur, out = {};
+  for (const [k, l, t, o] of ED_FIELDS) {
+    const el = $("#ed_" + k); let v = el.value.trim();
+    if (t === "num") { if (v === "") v = plOrig(p, k); else { v = +v; if (!(v >= o[0] && v <= o[1])) return { err: `${l}: מספר בין ${o[0]} ל-${o[1]}` }; } }
+    else if (t === "url") { if (v && !/^https:\/\/[^\s"'<>]+$/.test(v)) return { err: "הכתובת צריכה להתחיל ב-https://" }; }
+    else if (t === "sel" && (k === "dog" || k === "acc")) v = v === "" ? null : +v;
+    if (k === "n" && !v) return { err: "חסר שם למקום" };
+    const orig = plOrig(p, k);
+    const same = (orig == null || orig === "") && (v == null || v === "") ? true : String(orig) === String(v);
+    if (!same) out[k] = v;
+  }
+  return { fields: out };
+}
+$("#edSave").addEventListener("click", async () => {
+  const c = edCollect(); if (c.err) { $("#edErr").textContent = c.err; return; }
+  const p = PL.cur, rep = PL.rep; $("#edSave").disabled = true; $("#edSave").textContent = "שומרים…";
+  const ok = await plSave(p, c.fields, $("#edHidden").checked, $("#edNote").value.trim());
+  $("#edSave").disabled = false; $("#edSave").textContent = "שמירה";
+  if (!ok) { $("#edErr").textContent = "השמירה נכשלה, נסו שוב"; return; }
+  if (rep && $("#edDone").checked) { try { const r = await call("status", { ticket: rep.ticket, status: "טופל", note: (rep.note ? rep.note + " · " : "") + "המקום תוקן בלוח הבקרה" }); if (r && r.ok) { rep.status = "טופל"; rep.note = (rep.note ? rep.note + " · " : "") + "המקום תוקן בלוח הבקרה"; } } catch (e) {} }
+  edClose(); plRender(); if (S.data) reports();
+});
+$("#edReset").addEventListener("click", async () => { const p = PL.cur; if (await plSave(p, {}, false, "")) { edClose(); plRender(); } });
+$("#edCancel").addEventListener("click", edClose);
+$("#edWrap").addEventListener("keydown", e => { if (e.key === "Escape") edClose(); });
+$("#edWrap").addEventListener("click", e => { if (e.target === $("#edWrap")) edClose(); });
+$("#edForm").addEventListener("submit", e => e.preventDefault());
+/* reports: fix the place, hide it, delete the report */
+async function repPlace(r) { await plLoad(); if (!PL.list) return null; if (r.pid) { const p = PL.list.find(x => x.id === +r.pid); if (p) return p; } return r.place ? plFindByName(r.place) : null; }
+$("#reps").addEventListener("click", async e => {
+  const fx = e.target.closest("[data-fix]"), dl = e.target.closest("[data-del]"), dy = e.target.closest("[data-delyes]"), dn = e.target.closest("[data-delno]");
+  if (fx) { const r = S.data.reports.find(x => x.ticket === fx.dataset.fix); const p = r && await repPlace(r); if (!p) { $("#updated").textContent = `לא מצאנו את "${r && r.place}" ברשימת המקומות. חפשו אותו ב"מקומות באפליקציה".`; $("#plQ").value = r ? r.place : ""; $("#plQ").focus(); plRender(); return; } edOpen(p.id, r, fx); return; }
+  if (dl) { const box = dl.closest(".acts"); box.innerHTML = `<span class="small">למחוק את הפנייה לצמיתות?</span><button type="button" class="danger pri" data-delyes="${esc(dl.dataset.del)}">מחיקה</button><button type="button" data-delno="1">ביטול</button>`; box.querySelector("[data-delno]").focus(); return; }
+  if (dn) { reports(); return; }
+  if (dy) { const t = dy.dataset.delyes; dy.disabled = true; let r; try { r = await call("repDelete", { ticket: t }); } catch (err) { r = null; }
+    if (r && r.ok) { S.data.reports = S.data.reports.filter(x => x.ticket !== t); render(); $("#updated").textContent = `פנייה ${t} נמחקה`; const f = $("#repFilter button[aria-pressed=true]"); if (f) f.focus(); }
+    else { dy.disabled = false; $("#updated").textContent = "המחיקה נכשלה, נסו שוב"; } }
+});
+
 /* ---------- demo data ---------- */
 let DEMO = null;
 function demoCall(op, x) {
   if (op === "status") { const r = DEMO.reports.find(r => r.ticket === x.ticket); if (r) { r.status = x.status; r.note = x.note; } return { ok: true }; }
   if (op === "sugStatus") return { ok: true };
+  if (op === "placeSave") return { ok: true, fields: x.fields };
+  if (op === "placeReset") return { ok: true };
+  if (op === "repDelete") { DEMO.reports = DEMO.reports.filter(r => r.ticket !== x.ticket); return { ok: true }; }
   const days = (x && x.days) || 30, now = Date.now(), daily = [];
   let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   for (let i = days - 1; i >= 0; i--) { const dt = new Date(now - i * 864e5), we = dt.getDay() === 5 || dt.getDay() === 6, u = Math.round((we ? 14 : 6) + rnd() * 6 + (days - i) * 0.15); daily.push({ d: dt.toISOString().slice(0, 10), u, s: Math.round(u * (1.3 + rnd() * 0.5)) }); }

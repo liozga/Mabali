@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>מה בא לי · לוח בקרה</title>
 <link rel="icon" href="icons/mabali-192.png">
 <style>
@@ -30,7 +30,7 @@ main{max-width:1180px;margin:0 auto;padding:20px}
 .card h2{font-size:16px;margin:0 0 10px;font-weight:700}
 .card .sub{color:var(--muted);font-size:13px;margin:-6px 0 12px}
 label{display:block;font-weight:500;margin:10px 0 4px}
-input[type=text],input[type=password],input[type=url],select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%}
+input[type=text],input[type=password],input[type=url],input[type=number],input[type=search],select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%}
 textarea{min-height:56px}
 button{font:inherit;border-radius:999px;border:1px solid var(--sea);background:var(--surface);color:var(--sea);padding:7px 16px;cursor:pointer;font-weight:500}
 button.pri{background:var(--sea);color:var(--surface)}
@@ -78,6 +78,13 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .filters button[aria-pressed=true]{background:var(--sea);color:var(--surface)}
 .empty{color:var(--muted);padding:12px 0}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:grid;place-items:center;padding:16px}.modal[hidden]{display:none}
+.modal-box{background:var(--surface);border-radius:16px;max-width:720px;width:100%;max-height:92vh;overflow:auto;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.ed-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px}.ed-grid .wide{grid-column:1/-1}.ed-grid label{margin:8px 0 2px}.ed-grid .orig{font-size:12px;color:var(--warn);min-height:1em}
+@media (max-width:560px){.ed-grid{grid-template-columns:1fr}}
+.ed-hide{margin:14px 0 4px;align-items:flex-start;font-weight:400}.ed-hide input,#edDoneRow input{width:20px;height:20px;margin-top:2px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}.acts button{padding:4px 12px;font-size:13px}button.danger{border-color:var(--bad);color:var(--bad)}button.danger.pri{background:var(--bad);color:var(--surface)}
+.pill.ed{background:var(--warn-soft);color:var(--warn)}.pill.hid{background:var(--bad-soft);color:var(--bad)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
@@ -123,6 +130,15 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
       <details><summary>טבלה</summary><div class="tbl" id="dailyTbl"></div></details>
     </div>
 
+    <div class="card" id="plCard">
+      <h2>מקומות באפליקציה</h2>
+      <p class="sub">חיפוש לפי שם או יישוב, עריכה מהירה או הסתרה. השינויים מגיעים לאפליקציה בפתיחה הבאה שלה (באתר, לא בגרסה שבתוך Claude).</p>
+      <div class="row"><label for="plQ" class="sr">חיפוש מקום</label><input type="search" id="plQ" placeholder="למשל: חוף דדו, חיפה, גן חיות" autocomplete="off" style="flex:1 1 260px">
+        <div class="filters" id="plFilter" role="group" aria-label="סינון מקומות" style="margin:0"><button type="button" data-f="all" aria-pressed="true">הכול</button><button type="button" data-f="edited" aria-pressed="false">נערכו</button><button type="button" data-f="hidden" aria-pressed="false">מוסתרים</button></div></div>
+      <p class="small" id="plMsg" aria-live="polite"></p>
+      <div class="tbl" id="plList"></div>
+    </div>
+
     <div class="card" id="repCard">
       <h2>פניות ודיווחים</h2>
       <p class="sub">תקלות, שאלות, בקשות, משוב וטעויות במידע שנשלחו מהאפליקציה. משנים סטטוס ומוסיפים הערה, והשינוי נשמר בגיליון.</p>
@@ -149,6 +165,19 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
     <div class="card"><h2>כניסות ללוח הבקרה</h2><p class="sub">30 האירועים האחרונים: כניסות, יציאות וסיסמאות שגויות. ניסיונות שגויים שלא אתם עשיתם הם סימן להחליף סיסמה.</p><div class="tbl" id="logins"></div></div>
   </section>
 </main>
+<div id="edWrap" class="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="edT">
+    <h2 id="edT" tabindex="-1">עריכת מקום</h2>
+    <p class="small" id="edSub"></p>
+    <p class="demo" id="edRep" hidden></p>
+    <form id="edForm" class="ed-grid"></form>
+    <label class="row ed-hide"><input type="checkbox" id="edHidden"> <span><b>הסתרת המקום מהאפליקציה</b> <span class="small">(למשל אם נסגר. ביקורים קודמים של משתמשים יישמרו)</span></span></label>
+    <label for="edNote">הערה פנימית (לא מוצגת למשתמשים)</label><input type="text" id="edNote" maxlength="300">
+    <label class="row" id="edDoneRow" hidden><input type="checkbox" id="edDone" checked> <span id="edDoneT"></span></label>
+    <p class="err" id="edErr" role="alert"></p>
+    <div class="row"><button type="button" class="pri" id="edSave">שמירה</button><button type="button" id="edReset" hidden>החזרה לנתונים המקוריים</button><span style="flex:1"></span><button type="button" id="edCancel">ביטול</button></div>
+  </div>
+</div>
 <script src="admin.js"></script>
 </body>
 </html>
