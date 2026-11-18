@@ -25,6 +25,27 @@ async function call(op, extra) {
 }
 const ERRS = { auth: "סיסמה שגויה", locked: "יותר מדי ניסיונות שגויים. הכניסה חסומה ל-15 דקות.", "weak key": "הסיסמה בשרת קצרה מ-12 תווים. החליפו את ADMIN_KEY בסיסמה חזקה יותר.", legacy: "שרת הניטור בגרסה ישנה. הדביקו את monitor.gs החדש ב-Apps Script ועדכנו את הפריסה לגרסה חדשה.", "no admin key": "לא הוגדרה סיסמה בשרת: ב-Apps Script ← הגדרות הפרויקט ← Script properties מוסיפים ADMIN_KEY." };
 
+/* v1.52.1: visible messages (also on phones) with the server's reason, and a server version check */
+const NEED_V = "1.52.0";
+function notify(msg, bad) { let t = $("#toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.setAttribute("role", "status"); t.setAttribute("aria-live", "polite"); document.body.appendChild(t); }
+  t.textContent = msg; t.className = bad ? "bad" : ""; t.hidden = false; clearTimeout(notify.t); notify.t = setTimeout(() => { t.hidden = true; }, bad ? 9000 : 3500); }
+function errText(r, what) {
+  const e = r && r.error;
+  if (e === "unknown op") return `${what} נכשלה: שרת הניטור לא מכיר את הפעולה. צריך להדביק את monitor.gs החדש ב-Apps Script ולפרסם "גרסה חדשה" לפריסה הקיימת.`;
+  if (e === "not found") return `${what} נכשלה: הפריט לא נמצא בגיליון (אולי כבר נמחק). רעננו את הלוח.`;
+  if (e === "bad id") return `${what} נכשלה: מזהה המקום לא תקין.`;
+  if (e === "session") return "החיבור פג. צריך להזין סיסמה שוב.";
+  if (!r) return `${what} נכשלה: אין חיבור לשרת הניטור. בדקו את החיבור לאינטרנט ונסו שוב.`;
+  return `${what} נכשלה${e ? " (" + e + ")" : ""}. נסו שוב.`;
+}
+const verNum = v => String(v || "0").split(".").reduce((a, x) => a * 1000 + (+x || 0), 0);
+async function checkServer() {
+  if (S.demo || !S.ep) return; let j = null;
+  try { const r = await fetch(S.ep + "?t=" + Date.now(), { cache: "no-store" }); j = await r.json(); } catch (e) {}
+  const b = $("#srvWarn"); if (!b) return;
+  if (j && j.v && verNum(j.v) < verNum(NEED_V)) { b.hidden = false; b.textContent = `שרת הניטור בגרסה ${j.v}. עריכת מקומות ומחיקת פניות צריכות גרסה ${NEED_V} ומעלה: הדביקו את monitor.gs החדש ב-Apps Script, ואז פריסה ← ניהול פריסות ← עיפרון ← גרסה: חדשה ← פריסה.`; }
+  else b.hidden = true;
+}
 /* ---------- login ---------- */
 $("#ep").value = ENDPOINT || (() => { try { return localStorage.getItem("mb_ep") } catch (e) { return null } })() || "";   // the published address wins over one typed earlier
 $("#loginForm").addEventListener("submit", async e => {
@@ -67,7 +88,7 @@ async function load(fromLogin) {
     if (fromLogin || $("#dash").hidden) { $("#loginErr").textContent = msg; } else { $("#updated").textContent = msg; }
     return false;
   }
-  S.data = d; $("#login").hidden = true; $("#dash").hidden = false; $("#demoNote").hidden = !S.demo; touchIdle();
+  S.data = d; $("#login").hidden = true; $("#dash").hidden = false; $("#demoNote").hidden = !S.demo; touchIdle(); if (fromLogin || !checkServer.done) { checkServer.done = true; checkServer(); }
   $("#updated").textContent = "עודכן " + new Date(d.now).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
   render(); return true;
 }
@@ -143,8 +164,8 @@ $("#reps").addEventListener("click", async e => {
   b.disabled = true; b.textContent = "שומר…";
   let r; try { r = await call("status", { ticket: t, status: st, note }); } catch (err) { r = null; }
   b.disabled = false;
-  if (r && r.ok) { const rep = S.data.reports.find(x => x.ticket === t); rep.status = st; rep.note = note; render(); $("#updated").textContent = `${t} נשמר`; }
-  else { b.textContent = "שמירה"; $("#updated").textContent = "השמירה נכשלה, נסו שוב"; }
+  if (r && r.ok) { const rep = S.data.reports.find(x => x.ticket === t); rep.status = st; rep.note = note; render(); notify(`${t} נשמר`); }
+  else { b.textContent = "שמירה"; notify(errText(r, "השמירה"), true); }
 });
 function sugs(rows) {
   $("#sugs").innerHTML = rows.length ? `<table><thead><tr><th>התקבל</th><th>מקום</th><th>יישוב</th><th>סוג</th><th>למה ממליצים</th><th>סטטוס</th></tr></thead><tbody>${rows.map(r => `<tr><td>${when(r.at)}</td><td>${r.link && /^https?:\/\//.test(r.link) ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)}</td><td>${esc(r.city)}</td><td>${esc(r.type)}</td><td class="rep-text">${esc(r.why)}</td>
@@ -153,7 +174,7 @@ function sugs(rows) {
 $("#sugs").addEventListener("change", async e => {
   const s = e.target.closest("[data-sug]"); if (!s) return;
   let r; try { r = await call("sugStatus", { row: +s.dataset.sug, status: s.value }); } catch (err) { r = null; }
-  $("#updated").textContent = r && r.ok ? "הסטטוס נשמר" : "השמירה נכשלה, נסו שוב";
+  if (r && r.ok) notify("הסטטוס נשמר"); else notify(errText(r, "השמירה"), true);
   if (r && r.ok) { const x = S.data.suggestions.find(x => x.row === +s.dataset.sug); if (x) x.status = s.value; }
 });
 let rsT; addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.data) daily(S.data.daily); }, 150); });
@@ -216,16 +237,16 @@ $("#plList").addEventListener("click", async e => {
 async function plSave(p, fields, hidden, note) {
   const empty = !Object.keys(fields).length && !hidden;
   let r; try { r = await call(empty ? "placeReset" : "placeSave", { id: p.id, name: plCur(p, "n"), fields, hidden, note }); } catch (e) { r = null; }
-  if (!r || !r.ok) { $("#updated").textContent = "השמירה נכשלה, נסו שוב"; return false; }
+  if (!r || !r.ok) { notify(errText(r, hidden && !plHidden(p) ? "ההסתרה" : "השמירה"), true); PL.lastErr = errText(r, "השמירה"); return false; }
   if (empty) delete PL.ov.ov[p.id]; else PL.ov.ov[p.id] = r.fields || fields;
   PL.ov.hid = PL.ov.hid.filter(x => x !== p.id); if (hidden) PL.ov.hid.push(p.id);
-  $("#updated").textContent = `${plCur(p, "n")}: ${empty ? "חזר לנתונים המקוריים" : hidden ? "מוסתר מהאפליקציה" : "נשמר"}`;
+  notify(`${plCur(p, "n")}: ${empty ? "חזר לנתונים המקוריים" : hidden ? "מוסתר מהאפליקציה" : "נשמר"}`);
   return true;
 }
 /* editor */
 function edVal(p, k) { const v = plCur(p, k); return v == null ? "" : String(v); }
 async function edOpen(id, rep, from) {
-  await plLoad(); const p = PL.list && PL.list.find(x => x.id === id); if (!p) { $("#updated").textContent = "המקום לא נמצא ברשימה"; return; }
+  await plLoad(); const p = PL.list && PL.list.find(x => x.id === id); if (!p) { notify("המקום לא נמצא ברשימה", true); return; }
   PL.cur = p; PL.rep = rep || null; PL.from = from || document.activeElement;
   $("#edT").textContent = "עריכת מקום: " + plCur(p, "n"); $("#edSub").textContent = `מזהה ${p.id}${p.osm ? " · מקור: OpenStreetMap" : ""} · השינויים מגיעים לכל המשתמשים בפתיחה הבאה של האפליקציה`;
   $("#edRep").hidden = !rep; if (rep) $("#edRep").textContent = `דיווח ${rep.ticket}: ${rep.text}`;
@@ -263,7 +284,7 @@ $("#edSave").addEventListener("click", async () => {
   const p = PL.cur, rep = PL.rep; $("#edSave").disabled = true; $("#edSave").textContent = "שומרים…";
   const ok = await plSave(p, c.fields, $("#edHidden").checked, $("#edNote").value.trim());
   $("#edSave").disabled = false; $("#edSave").textContent = "שמירה";
-  if (!ok) { $("#edErr").textContent = "השמירה נכשלה, נסו שוב"; return; }
+  if (!ok) { $("#edErr").textContent = PL.lastErr || "השמירה נכשלה, נסו שוב"; return; }
   if (rep && $("#edDone").checked) { try { const r = await call("status", { ticket: rep.ticket, status: "טופל", note: (rep.note ? rep.note + " · " : "") + "המקום תוקן בלוח הבקרה" }); if (r && r.ok) { rep.status = "טופל"; rep.note = (rep.note ? rep.note + " · " : "") + "המקום תוקן בלוח הבקרה"; } } catch (e) {} }
   edClose(); plRender(); if (S.data) reports();
 });
@@ -276,12 +297,12 @@ $("#edForm").addEventListener("submit", e => e.preventDefault());
 async function repPlace(r) { await plLoad(); if (!PL.list) return null; if (r.pid) { const p = PL.list.find(x => x.id === +r.pid); if (p) return p; } return r.place ? plFindByName(r.place) : null; }
 $("#reps").addEventListener("click", async e => {
   const fx = e.target.closest("[data-fix]"), dl = e.target.closest("[data-del]"), dy = e.target.closest("[data-delyes]"), dn = e.target.closest("[data-delno]");
-  if (fx) { const r = S.data.reports.find(x => x.ticket === fx.dataset.fix); const p = r && await repPlace(r); if (!p) { $("#updated").textContent = `לא מצאנו את "${r && r.place}" ברשימת המקומות. חפשו אותו ב"מקומות באפליקציה".`; $("#plQ").value = r ? r.place : ""; $("#plQ").focus(); plRender(); return; } edOpen(p.id, r, fx); return; }
+  if (fx) { const r = S.data.reports.find(x => x.ticket === fx.dataset.fix); const p = r && await repPlace(r); if (!p) { notify(`לא מצאנו את "${r && r.place}" ברשימת המקומות. חפשו אותו ב"מקומות באפליקציה".`, true); $("#plQ").value = r ? r.place : ""; $("#plQ").focus(); plRender(); return; } edOpen(p.id, r, fx); return; }
   if (dl) { const box = dl.closest(".acts"); box.innerHTML = `<span class="small">למחוק את הפנייה לצמיתות?</span><button type="button" class="danger pri" data-delyes="${esc(dl.dataset.del)}">מחיקה</button><button type="button" data-delno="1">ביטול</button>`; box.querySelector("[data-delno]").focus(); return; }
   if (dn) { reports(); return; }
   if (dy) { const t = dy.dataset.delyes; dy.disabled = true; let r; try { r = await call("repDelete", { ticket: t }); } catch (err) { r = null; }
-    if (r && r.ok) { S.data.reports = S.data.reports.filter(x => x.ticket !== t); render(); $("#updated").textContent = `פנייה ${t} נמחקה`; const f = $("#repFilter button[aria-pressed=true]"); if (f) f.focus(); }
-    else { dy.disabled = false; $("#updated").textContent = "המחיקה נכשלה, נסו שוב"; } }
+    if (r && r.ok) { S.data.reports = S.data.reports.filter(x => x.ticket !== t); render(); notify(`פנייה ${t} נמחקה`); const f = $("#repFilter button[aria-pressed=true]"); if (f) f.focus(); }
+    else { notify(errText(r, "המחיקה"), true); reports(); } }
 });
 
 /* ---------- demo data ---------- */
