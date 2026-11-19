@@ -84,7 +84,7 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
 @media (max-width:560px){.ed-grid{grid-template-columns:1fr}}
 .ed-hide{margin:14px 0 4px;align-items:flex-start;font-weight:400}.ed-hide input,#edDoneRow input{width:20px;height:20px;margin-top:2px}
 .acts{display:flex;gap:6px;flex-wrap:wrap}.acts button{padding:4px 12px;font-size:13px}button.danger{border-color:var(--bad);color:var(--bad)}button.danger.pri{background:var(--bad);color:var(--surface)}
-.pill.ed{background:var(--warn-soft);color:var(--warn)}.pill.hid{background:var(--bad-soft);color:var(--bad)}
+.pill.ed{background:var(--warn-soft);color:var(--warn)}.pill.fx{background:var(--sea-soft);color:var(--ink)}.pill.hid{background:var(--bad-soft);color:var(--bad)}
 #toast{position:fixed;inset-inline:16px;bottom:16px;margin-inline:auto;max-width:560px;z-index:30;background:var(--ink);color:var(--bg);border-radius:12px;padding:12px 16px;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.25)}#toast.bad{background:var(--bad);color:#fff}#toast[hidden]{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
@@ -136,7 +136,7 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
       <h2>מקומות באפליקציה</h2>
       <p class="sub">חיפוש לפי שם או יישוב, עריכה מהירה או הסתרה. השינויים מגיעים לאפליקציה בפתיחה הבאה שלה (באתר, לא בגרסה שבתוך Claude).</p>
       <div class="row"><label for="plQ" class="sr">חיפוש מקום</label><input type="search" id="plQ" placeholder="למשל: חוף דדו, חיפה, גן חיות" autocomplete="off" style="flex:1 1 260px">
-        <div class="filters" id="plFilter" role="group" aria-label="סינון מקומות" style="margin:0"><button type="button" data-f="all" aria-pressed="true">הכול</button><button type="button" data-f="edited" aria-pressed="false">נערכו</button><button type="button" data-f="hidden" aria-pressed="false">מוסתרים</button></div></div>
+        <div class="filters" id="plFilter" role="group" aria-label="סינון מקומות" style="margin:0"><button type="button" data-f="all" aria-pressed="true">הכול</button><button type="button" data-f="edited" aria-pressed="false">נערכו</button><button type="button" data-f="hidden" aria-pressed="false">מוסתרים</button><button type="button" data-f="fix" aria-pressed="false">לשיפור</button></div></div>
       <p class="small" id="plMsg" aria-live="polite"></p>
       <div class="tbl" id="plList"></div>
     </div>

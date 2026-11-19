@@ -1,0 +1,27 @@
+# Mabali live check: the public site and the live monitoring server, end to end (read-only).
+# Runs every morning, after each site deployment, and on demand (Actions → Live check → Run workflow).
+# When a check fails GitHub e-mails the repo owner.
+name: Live check
+on:
+  schedule:
+    - cron: "17 4 * * *"          # 06:17 Israel time (winter)
+  workflow_run:
+    workflows: ["pages-build-deployment"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for the CDN after a deployment
+        if: github.event_name == 'workflow_run'
+        run: sleep 60
+      - name: Check the site and the server
+        run: node tools/live_check.mjs https://liozga.github.io/Mabali/

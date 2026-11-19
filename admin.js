@@ -207,7 +207,18 @@ async function plLoad() {
   })();
   return PL.loading;
 }
-const plOrig = (p, k) => (p[k] !== undefined ? p[k] : (k in PL.def ? PL.def[k] : ""));
+const plOrig = (p, k) => (p[k] !== undefined ? p[k] : ((k === "a" || k === "ch") && p.pu) ? "" : (k in PL.def ? PL.def[k] : ""));
+/* v1.54.0: what is missing or weak in a place's data, for the "לשיפור" worklist. Curated places first: they are fewer and get more views. */
+function plIssues(p) {
+  const o = []; const n = String(plCur(p, "n") || "");
+  if (p.anon && !(PL.ov.ov[p.id] && "n" in PL.ov.ov[p.id])) o.push("שם כללי");
+  if (!plCur(p, "c")) o.push("אין יישוב");
+  if (plCur(p, "a") === "" && plCur(p, "ch") === "") o.push("מחיר לא ידוע");
+  if (!p.osm && (!plCur(p, "hr") || plCur(p, "hr") === PL.def.hr)) o.push("אין שעות");
+  if (!p.osm && !plCur(p, "web")) o.push("אין אתר");
+  if (n.length > 40) o.push("שם ארוך");
+  return o;
+}
 const plCur = (p, k) => { const o = PL.ov.ov[p.id]; return o && k in o ? o[k] : plOrig(p, k); };
 const plHidden = p => PL.ov.hid.indexOf(p.id) >= 0;
 const plEdited = p => !!PL.ov.ov[p.id] && Object.keys(PL.ov.ov[p.id]).length > 0;
@@ -217,12 +228,15 @@ function plRender() {
   if (!PL.list) return; const q = normH($("#plQ").value);
   let rows = PL.list;
   if (PL.f === "edited") rows = rows.filter(plEdited); else if (PL.f === "hidden") rows = rows.filter(plHidden);
+  else if (PL.f === "fix") { rows = rows.filter(p => !plHidden(p) && plIssues(p).length).sort((x, y) => (x.osm ? 1 : 0) - (y.osm ? 1 : 0));
+    const c = {}; rows.forEach(p => plIssues(p).forEach(i => { c[i] = (c[i] || 0) + 1; }));
+    $("#plMsg").textContent = `לשיפור: ${nf.format(rows.length)} מקומות. ` + Object.entries(c).map(([k, v]) => `${k}: ${nf.format(v)}`).join(" · ") + ". מקומות מהטבלה המקורית מוצגים ראשונים."; }
   if (q.length >= 2) rows = rows.filter(p => normH(plCur(p, "n") + " " + plCur(p, "c")).includes(q));
   else if (PL.f === "all") { $("#plList").innerHTML = '<p class="empty">הקלידו לפחות 2 אותיות לחיפוש</p>'; return; }
   const tot = rows.length; rows = rows.slice(0, 40);
-  const price = p => { const a = plCur(p, "a"), c = plCur(p, "ch"); return !a && !c ? "חינם" : `מבוגר ₪${a || 0} · ילד/ה ₪${c || 0}`; };
+  const price = p => { const a = plCur(p, "a"), c = plCur(p, "ch"); return a === "" && c === "" ? "לא ידוע" : !a && !c ? "חינם" : `מבוגר ₪${a || 0} · ילד/ה ₪${c || 0}`; };
   $("#plList").innerHTML = rows.length ? `<table><thead><tr><th>מקום</th><th>יישוב</th><th>סוג</th><th>מחיר</th><th>פעולות</th></tr></thead><tbody>${rows.map(p => `<tr>
-    <td>${esc(plCur(p, "n"))} ${plEdited(p) ? '<span class="pill ed">נערך</span>' : ""} ${plHidden(p) ? '<span class="pill hid">מוסתר</span>' : ""}${p.osm ? ' <span class="small">(OpenStreetMap)</span>' : ""}</td>
+    <td>${esc(plCur(p, "n"))} ${plEdited(p) ? '<span class="pill ed">נערך</span>' : ""} ${plHidden(p) ? '<span class="pill hid">מוסתר</span>' : ""}${p.osm ? ' <span class="small">(OpenStreetMap)</span>' : ""}${PL.f === "fix" ? " " + plIssues(p).map(i => `<span class="pill fx">${esc(i)}</span>`).join(" ") : ""}</td>
     <td>${esc(plCur(p, "c"))}</td><td>${esc(KIND[plCur(p, "k")] || "")}</td><td>${esc(price(p))}</td>
     <td><div class="acts"><button type="button" data-ed="${p.id}">עריכה<span class="sr"> ${esc(plCur(p, "n"))}</span></button><button type="button" class="${plHidden(p) ? "" : "danger"}" data-hide="${p.id}">${plHidden(p) ? "החזרה לאפליקציה" : "הסתרה"}<span class="sr"> ${esc(plCur(p, "n"))}</span></button></div></td></tr>`).join("")}</tbody></table>${tot > 40 ? `<p class="small">מוצגים 40 מתוך ${nf.format(tot)}. דייקו את החיפוש.</p>` : ""}` : '<p class="empty">לא נמצאו מקומות</p>';
 }

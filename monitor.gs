@@ -1,7 +1,7 @@
 /**
- * מה בא לי – שרת הניטור (גרסה 1.52.0, 19.11.2026)
- * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0).
- * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.52.0".
+ * מה בא לי – שרת הניטור (גרסה 1.54.0, 19.11.2026)
+ * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0), מחיקת פרטי קשר אחרי 12 חודשים (1.54.0).
+ * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.54.0".
  * קולט מהאפליקציה: נתוני שימוש אנונימיים (רק ממי שאישר), שגיאות טכניות, דיווחי תקלות ומשוב, והמלצות על מקומות.
  * מחזיר ללוח הבקרה (admin.html) סיכומים, ומאפשר לעדכן סטטוס לדיווחים – רק עם סיסמת המנהל.
  *
@@ -26,7 +26,7 @@ const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'c
 /* ---------- entry points ---------- */
 function doGet(e) {
   if (e && e.parameter && e.parameter.op === 'ov') return out_(ovPublic_());   // place corrections, read by the app (public data only)
-  return out_({ ok: true, app: 'mabali-monitor', v: '1.52.0' });
+  return out_({ ok: true, app: 'mabali-monitor', v: '1.54.0' });
 }
 
 function doPost(e) {
@@ -259,5 +259,18 @@ function trimOldEvents() {
     const v = sh.getRange(2, 1, n, 1).getValues();
     let k = 0; while (k < v.length && new Date(v[k][0]).getTime() < cut) k++;
     if (k) sh.deleteRows(2, k);
+  });
+  purgeContacts_();
+}
+/* v1.54.0 privacy: 12 months after a report or a suggestion arrived, the personal details in it are erased (the content stays, for
+   improving the app). Reports: contact (col 6) and device id (col 9). Suggestions: contact (col 13) and family name (col 14). */
+const CONTACT_DAYS = 365;
+function purgeContacts_() {
+  const cut = Date.now() - CONTACT_DAYS * 864e5;
+  [[T_REP, H_REP, 2, [6, 9]], [T_SUG, H_SUG, 1, [13, 14]]].forEach(([tab, head, dateCol, cols]) => {
+    const sh = sheet_(tab, head), n = sh.getLastRow() - 1; if (n < 1) return;
+    const v = sh.getRange(2, 1, n, head.length).getValues();
+    v.forEach((r, i) => { const t = new Date(r[dateCol - 1]).getTime(); if (!(t < cut)) return;
+      cols.forEach(c => { if (r[c - 1] !== '' && r[c - 1] != null) sh.getRange(i + 2, c).setValue(''); }); });
   });
 }
