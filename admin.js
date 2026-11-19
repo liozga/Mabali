@@ -1,6 +1,6 @@
 /* מה בא לי – לוח בקרה (v1.43.0). Reads summaries from the monitoring web app (monitor.gs) with the admin password. */
 "use strict";
-const ENDPOINT = "https://script.google.com/macros/s/AKfycbyYGa4tGk3wNqetggcqH-ssOrMyZp-8LKPNiV_Yhm1ScBDMwAXcqO0nYRGCdvHjsD4n/exec";   // optional: the /exec address, so it doesn't need to be typed on every device
+const ENDPOINT = "https://script.google.com/macros/s/AKfycbyllqjqUeSGtvhQz6E-b9LJRFQjMuB6MLRPnpQjjAw5eZUZ1lfZ6vH45xkTjeFT5spN/exec";   // optional: the /exec address, so it doesn't need to be typed on every device
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = new Intl.NumberFormat("he-IL");
