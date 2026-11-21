@@ -1,8 +1,8 @@
 /**
- * מה בא לי – שרת הניטור (גרסה 1.55.0, 21.11.2026)
+ * מה בא לי – שרת הניטור (גרסה 1.55.1, 21.11.2026)
  * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0), מחיקת פרטי קשר אחרי 12 חודשים (1.54.0),
- * בדיקת מקומות שנסגרו לצמיתות בגוגל מפס – checkClosedPlaces (1.55.0).
- * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.55.0".
+ * בדיקת מקומות שנסגרו לצמיתות בגוגל מפס – checkClosedPlaces (1.55.0; 1.55.1: קצב איטי והמשך אוטומטי אחרי מגבלת דקה).
+ * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.55.1".
  * קולט מהאפליקציה: נתוני שימוש אנונימיים (רק ממי שאישר), שגיאות טכניות, דיווחי תקלות ומשוב, והמלצות על מקומות.
  * מחזיר ללוח הבקרה (admin.html) סיכומים, ומאפשר לעדכן סטטוס לדיווחים – רק עם סיסמת המנהל.
  *
@@ -27,7 +27,7 @@ const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'c
 /* ---------- entry points ---------- */
 function doGet(e) {
   if (e && e.parameter && e.parameter.op === 'ov') return out_(ovPublic_());   // place corrections, read by the app (public data only)
-  return out_({ ok: true, app: 'mabali-monitor', v: '1.55.0' });
+  return out_({ ok: true, app: 'mabali-monitor', v: '1.55.1' });
 }
 
 function doPost(e) {
@@ -244,6 +244,7 @@ function repDelete_(d) {
  * Places without a name (generic playgrounds) cannot be matched by name and are skipped. */
 const T_GC = 'בדיקת גוגל', H_GC = ['מזהה', 'שם אצלנו', 'יישוב', 'שם בגוגל', 'סטטוס בגוגל', 'מרחק (מ׳)', 'פעולה', 'נבדק'];
 const GC_LIST = 'https://liozga.github.io/Mabali/places.json', GC_MONTH_CAP = 4800, GC_RUN_MS = 290000, GC_HIDE_M = 300, GC_NEAR_M = 1000;
+const GC_BATCH = 10, GC_BATCH_MS = 4000;   // 1.55.1: about 150 requests a minute, well under Google's per-minute limit
 function gcDist_(a, b) { const r = x => x * Math.PI / 180, dLa = r(b.la - a.la), dLo = r(b.lo - a.lo);
   const h = Math.sin(dLa / 2) ** 2 + Math.cos(r(a.la)) * Math.cos(r(b.la)) * Math.sin(dLo / 2) ** 2; return Math.round(2 * 6371000 * Math.asin(Math.sqrt(h))); }
 function gcHide_(p, note) {
@@ -260,41 +261,45 @@ function checkClosedPlaces() {
   let used = P.getProperty('GC_MONTH') === month ? +(P.getProperty('GC_USED') || 0) : 0;
   const list = JSON.parse(UrlFetchApp.fetch(GC_LIST + '?t=' + Date.now()).getContentText()).places
     .filter(p => !p.anon && p.n && p.la != null).sort((a, b) => (a.osm ? 1 : 0) - (b.osm ? 1 : 0) || a.id - b.id);
-  let i = +(P.getProperty('GC_CURSOR') || 0), hidden = 0, review = 0, err = '';
+  let i = +(P.getProperty('GC_CURSOR') || 0), hidden = 0, review = 0, err = '', slow = false;
   const sh = sheet_(T_GC, H_GC), now = new Date();
   while (i < list.length && Date.now() - t0 < GC_RUN_MS && used < GC_MONTH_CAP) {
-    const batch = list.slice(i, i + Math.min(20, GC_MONTH_CAP - used));
+    const tb = Date.now(), batch = list.slice(i, i + Math.min(GC_BATCH, GC_MONTH_CAP - used));
     const res = UrlFetchApp.fetchAll(batch.map(p => ({ url: 'https://places.googleapis.com/v1/places:searchText', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.businessStatus,places.location' },
       payload: JSON.stringify({ textQuery: p.n + (p.c ? ' ' + p.c : ''), languageCode: 'he', regionCode: 'IL', pageSize: 3,
         locationBias: { circle: { center: { latitude: p.la, longitude: p.lo }, radius: 2000 } } }) })));
-    let stop = false;
-    res.forEach((r, j) => {
-      const p = batch[j], code = r.getResponseCode();
-      if (code !== 200) { if (!err) err = 'HTTP ' + code + ': ' + r.getContentText().slice(0, 200); if (code === 400 || code === 403 || code === 429) stop = true; return; }
+    let stop = false, done = 0;
+    for (let j = 0; j < res.length && !stop; j++) {
+      const r = res[j], p = batch[j], code = r.getResponseCode();
+      // 429 = Google's per-minute limit: keep what was checked, continue from here in a few minutes. 400/403 = key problem: stop.
+      if (code === 429) { slow = true; stop = true; break; }
+      if (code !== 200) { if (!err) err = 'HTTP ' + code + ': ' + r.getContentText().slice(0, 200); if (code === 400 || code === 403) { stop = true; break; } done++; continue; }
+      done++;
       used++;
       const cand = (JSON.parse(r.getContentText()).places || []).filter(g => g.location)
         .map(g => ({ g: g, m: gcDist_(p, { la: g.location.latitude, lo: g.location.longitude }) })).sort((a, b) => a.m - b.m)[0];
-      if (!cand || cand.m > GC_NEAR_M) return;
+      if (!cand || cand.m > GC_NEAR_M) continue;
       const st = cand.g.businessStatus || '';
-      if (st !== 'CLOSED_PERMANENTLY' && st !== 'CLOSED_TEMPORARILY') return;
+      if (st !== 'CLOSED_PERMANENTLY' && st !== 'CLOSED_TEMPORARILY') continue;
       let act = 'לבדיקה ידנית';
       if (st === 'CLOSED_PERMANENTLY' && cand.m <= GC_HIDE_M) { act = gcHide_(p, 'סגור לצמיתות בגוגל מפס (בדיקה אוטומטית ' + Utilities.formatDate(now, 'Asia/Jerusalem', 'dd.MM.yyyy') + ')') ? 'הוסתר' : 'כבר מוסתר'; if (act === 'הוסתר') hidden++; }
       else review++;
       sh.appendRow([p.id, clean_(p.n, 80), clean_(p.c, 60), clean_(cand.g.displayName && cand.g.displayName.text, 80),
         st === 'CLOSED_PERMANENTLY' ? 'סגור לצמיתות' : 'סגור זמנית', cand.m, act, now]);
-    });
+    }
+    i += done;
     if (stop) break;
-    i += batch.length;
+    const wait = GC_BATCH_MS - (Date.now() - tb); if (wait > 0) Utilities.sleep(wait);
   }
   P.setProperties({ GC_CURSOR: String(i >= list.length ? 0 : i), GC_MONTH: month, GC_USED: String(used) });
   if (hidden) CacheService.getScriptCache().remove('ov_json');
   const prev = P.getProperty('GC_NEXT');                                      // the one-off trigger this function made last time
   if (prev) ScriptApp.getProjectTriggers().forEach(t => { if (t.getUniqueId() === prev) ScriptApp.deleteTrigger(t); });
-  const more = !err && i < list.length && used < GC_MONTH_CAP;
-  P.setProperty('GC_NEXT', more ? ScriptApp.newTrigger('checkClosedPlaces').timeBased().after(60 * 1000).create().getUniqueId() : '');
+  const fatal = err && /^HTTP 40[03]/.test(err), more = !fatal && i < list.length && used < GC_MONTH_CAP;
+  P.setProperty('GC_NEXT', more ? ScriptApp.newTrigger('checkClosedPlaces').timeBased().after((slow ? 3 : 1) * 60 * 1000).create().getUniqueId() : '');
   const msg = `בדיקת גוגל: ${Math.min(i, list.length)}/${list.length} מקומות נבדקו, ${hidden} הוסתרו, ${review} לבדיקה ידנית, ${used} בקשות החודש.` +
-    (err ? ' נעצר: ' + err : more ? ' ממשיך בעוד דקה.' : used >= GC_MONTH_CAP && i < list.length ? ' הגיע למכסה החודשית; ימשיך בחודש הבא בהרצה ידנית.' : ' הבדיקה הסתיימה.');
+    (fatal ? ' נעצר: ' + err : more ? (slow ? ' גוגל ביקש להאט; ממשיך בעוד 3 דקות.' : ' ממשיך בעוד דקה.') : used >= GC_MONTH_CAP && i < list.length ? ' הגיע למכסה החודשית; ימשיך בחודש הבא בהרצה ידנית.' : ' הבדיקה הסתיימה.');
   log_(msg, 'checkClosedPlaces'); console.log(msg);
   const to = P.getProperty('NOTIFY_EMAIL'); if (to && !more) MailApp.sendEmail(to, 'מה בא לי – בדיקת מקומות סגורים בגוגל', msg + '\nהפירוט בגיליון "בדיקת גוגל".');
   return msg;
