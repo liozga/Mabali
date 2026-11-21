@@ -2,7 +2,7 @@
 // Runs every day from .github/workflows/live-check.yml; a failure e-mails the repo owner (GitHub's default for failed scheduled runs).
 // Manual run: node tools/live_check.mjs [site URL]
 const SITE = (process.argv[2] || 'https://liozga.github.io/Mabali/').replace(/\/?$/, '/');
-const NEED_SERVER = '1.54.0';           // the monitor.gs version in this repo (fails until it is deployed on the app's URL)
+const NEED_SERVER = '1.52.0';           // lowest server the app and dashboard need (scheduled functions run the saved code, not the deployment)
 const MIN_PLACES = 9000;
 let fail = 0; const ok = (name, cond, info = '') => { console.log((cond ? 'PASS ' : 'FAIL ') + name + (info ? '  ' + info : '')); if (!cond) fail++; };
 const ver = s => String(s || '0').split('.').map(Number); const ge = (a, b) => { const x = ver(a), y = ver(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return true; };

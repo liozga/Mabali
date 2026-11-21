@@ -1,7 +1,8 @@
 /**
- * מה בא לי – שרת הניטור (גרסה 1.54.0, 19.11.2026)
- * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0), מחיקת פרטי קשר אחרי 12 חודשים (1.54.0).
- * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.54.0".
+ * מה בא לי – שרת הניטור (גרסה 1.55.0, 21.11.2026)
+ * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0), מחיקת פרטי קשר אחרי 12 חודשים (1.54.0),
+ * בדיקת מקומות שנסגרו לצמיתות בגוגל מפס – checkClosedPlaces (1.55.0).
+ * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.55.0".
  * קולט מהאפליקציה: נתוני שימוש אנונימיים (רק ממי שאישר), שגיאות טכניות, דיווחי תקלות ומשוב, והמלצות על מקומות.
  * מחזיר ללוח הבקרה (admin.html) סיכומים, ומאפשר לעדכן סטטוס לדיווחים – רק עם סיסמת המנהל.
  *
@@ -26,7 +27,7 @@ const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'c
 /* ---------- entry points ---------- */
 function doGet(e) {
   if (e && e.parameter && e.parameter.op === 'ov') return out_(ovPublic_());   // place corrections, read by the app (public data only)
-  return out_({ ok: true, app: 'mabali-monitor', v: '1.54.0' });
+  return out_({ ok: true, app: 'mabali-monitor', v: '1.55.0' });
 }
 
 function doPost(e) {
@@ -231,6 +232,72 @@ function repDelete_(d) {
   const ids = sh.getRange(2, 1, n, 1).getValues();
   for (let i = 0; i < ids.length; i++) if (ids[i][0] === t) { sh.deleteRow(i + 2); log_('מחיקת פנייה ' + t, d.ua); return { ok: true }; }
   return { ok: false, error: 'not found' };
+}
+
+/* ---------- v1.55.0: places that Google Maps marks as permanently closed ----------
+ * Run checkClosedPlaces once from the editor (Run). It needs PLACES_KEY in Script properties: a Google Maps Platform key with
+ * "Places API (New)" enabled. Each place is one Text Search Pro request; Google gives 5,000 free a month, so a run stops at
+ * GC_MONTH_CAP requests a calendar month and the next month continues where it stopped. A run lasts at most ~5 minutes and
+ * schedules the next part itself until every named place was checked. Results: sheet "בדיקת גוגל".
+ *  - Google says "closed permanently" and its place is within 300 m of ours -> hidden in the app (undo: dashboard, "מוסתרים").
+ *  - Closed permanently but 300-1000 m away, or closed temporarily -> listed for a manual look, not hidden.
+ * Places without a name (generic playgrounds) cannot be matched by name and are skipped. */
+const T_GC = 'בדיקת גוגל', H_GC = ['מזהה', 'שם אצלנו', 'יישוב', 'שם בגוגל', 'סטטוס בגוגל', 'מרחק (מ׳)', 'פעולה', 'נבדק'];
+const GC_LIST = 'https://liozga.github.io/Mabali/places.json', GC_MONTH_CAP = 4800, GC_RUN_MS = 290000, GC_HIDE_M = 300, GC_NEAR_M = 1000;
+function gcDist_(a, b) { const r = x => x * Math.PI / 180, dLa = r(b.la - a.la), dLo = r(b.lo - a.lo);
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(r(a.la)) * Math.cos(r(b.la)) * Math.sin(dLo / 2) ** 2; return Math.round(2 * 6371000 * Math.asin(Math.sqrt(h))); }
+function gcHide_(p, note) {
+  const sh = sheet_(T_OV, H_OV), row = ovFind_(sh, p.id);
+  if (row) { const v = sh.getRange(row, 1, 1, H_OV.length).getValues()[0]; if (v[3] === 'כן') return false;
+    sh.getRange(row, 4, 1, 3).setValues([['כן', new Date(), note]]); }
+  else sh.appendRow([p.id, clean_(p.n, 80), '{}', 'כן', new Date(), note]);
+  return true;
+}
+function checkClosedPlaces() {
+  const t0 = Date.now(), P = PropertiesService.getScriptProperties(), key = P.getProperty('PLACES_KEY');
+  if (!key) throw new Error('חסר PLACES_KEY ב-Script properties (מפתח Google Maps Platform עם Places API (New)).');
+  const month = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM');
+  let used = P.getProperty('GC_MONTH') === month ? +(P.getProperty('GC_USED') || 0) : 0;
+  const list = JSON.parse(UrlFetchApp.fetch(GC_LIST + '?t=' + Date.now()).getContentText()).places
+    .filter(p => !p.anon && p.n && p.la != null).sort((a, b) => (a.osm ? 1 : 0) - (b.osm ? 1 : 0) || a.id - b.id);
+  let i = +(P.getProperty('GC_CURSOR') || 0), hidden = 0, review = 0, err = '';
+  const sh = sheet_(T_GC, H_GC), now = new Date();
+  while (i < list.length && Date.now() - t0 < GC_RUN_MS && used < GC_MONTH_CAP) {
+    const batch = list.slice(i, i + Math.min(20, GC_MONTH_CAP - used));
+    const res = UrlFetchApp.fetchAll(batch.map(p => ({ url: 'https://places.googleapis.com/v1/places:searchText', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.businessStatus,places.location' },
+      payload: JSON.stringify({ textQuery: p.n + (p.c ? ' ' + p.c : ''), languageCode: 'he', regionCode: 'IL', pageSize: 3,
+        locationBias: { circle: { center: { latitude: p.la, longitude: p.lo }, radius: 2000 } } }) })));
+    let stop = false;
+    res.forEach((r, j) => {
+      const p = batch[j], code = r.getResponseCode();
+      if (code !== 200) { if (!err) err = 'HTTP ' + code + ': ' + r.getContentText().slice(0, 200); if (code === 400 || code === 403 || code === 429) stop = true; return; }
+      used++;
+      const cand = (JSON.parse(r.getContentText()).places || []).filter(g => g.location)
+        .map(g => ({ g: g, m: gcDist_(p, { la: g.location.latitude, lo: g.location.longitude }) })).sort((a, b) => a.m - b.m)[0];
+      if (!cand || cand.m > GC_NEAR_M) return;
+      const st = cand.g.businessStatus || '';
+      if (st !== 'CLOSED_PERMANENTLY' && st !== 'CLOSED_TEMPORARILY') return;
+      let act = 'לבדיקה ידנית';
+      if (st === 'CLOSED_PERMANENTLY' && cand.m <= GC_HIDE_M) { act = gcHide_(p, 'סגור לצמיתות בגוגל מפס (בדיקה אוטומטית ' + Utilities.formatDate(now, 'Asia/Jerusalem', 'dd.MM.yyyy') + ')') ? 'הוסתר' : 'כבר מוסתר'; if (act === 'הוסתר') hidden++; }
+      else review++;
+      sh.appendRow([p.id, clean_(p.n, 80), clean_(p.c, 60), clean_(cand.g.displayName && cand.g.displayName.text, 80),
+        st === 'CLOSED_PERMANENTLY' ? 'סגור לצמיתות' : 'סגור זמנית', cand.m, act, now]);
+    });
+    if (stop) break;
+    i += batch.length;
+  }
+  P.setProperties({ GC_CURSOR: String(i >= list.length ? 0 : i), GC_MONTH: month, GC_USED: String(used) });
+  if (hidden) CacheService.getScriptCache().remove('ov_json');
+  const prev = P.getProperty('GC_NEXT');                                      // the one-off trigger this function made last time
+  if (prev) ScriptApp.getProjectTriggers().forEach(t => { if (t.getUniqueId() === prev) ScriptApp.deleteTrigger(t); });
+  const more = !err && i < list.length && used < GC_MONTH_CAP;
+  P.setProperty('GC_NEXT', more ? ScriptApp.newTrigger('checkClosedPlaces').timeBased().after(60 * 1000).create().getUniqueId() : '');
+  const msg = `בדיקת גוגל: ${Math.min(i, list.length)}/${list.length} מקומות נבדקו, ${hidden} הוסתרו, ${review} לבדיקה ידנית, ${used} בקשות החודש.` +
+    (err ? ' נעצר: ' + err : more ? ' ממשיך בעוד דקה.' : used >= GC_MONTH_CAP && i < list.length ? ' הגיע למכסה החודשית; ימשיך בחודש הבא בהרצה ידנית.' : ' הבדיקה הסתיימה.');
+  log_(msg, 'checkClosedPlaces'); console.log(msg);
+  const to = P.getProperty('NOTIFY_EMAIL'); if (to && !more) MailApp.sendEmail(to, 'מה בא לי – בדיקת מקומות סגורים בגוגל', msg + '\nהפירוט בגיליון "בדיקת גוגל".');
+  return msg;
 }
 
 /* ---------- helpers ---------- */
