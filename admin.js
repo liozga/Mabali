@@ -107,6 +107,7 @@ function render() {
   hbars("#versions", d.versions);
   hbars("#envs", d.envs.map(([k, v]) => [ENVS[k] || k, v]));
   places(d.places); errors(d.errors); reports(); sugs(d.suggestions); logins(d.logins || []);
+  if (window.anAfterLoad) try { anAfterLoad(); } catch (e) {}
 }
 function hbars(sel, rows) {
   const el = $(sel); if (!rows.length) { el.innerHTML = '<li class="empty">אין נתונים בתקופה</li>'; return; }
@@ -326,6 +327,7 @@ function demoCall(op, x) {
   if (op === "sugStatus") return { ok: true };
   if (op === "placeSave") return { ok: true, fields: x.fields };
   if (op === "placeReset") return { ok: true };
+  if (op === "analytics") return demoAnalytics(x);
   if (op === "repDelete") { DEMO.reports = DEMO.reports.filter(r => r.ticket !== x.ticket); return { ok: true }; }
   const days = (x && x.days) || 30, now = Date.now(), daily = [];
   let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
@@ -353,3 +355,21 @@ function demoCall(op, x) {
 (async () => { const tok = ses.get(), ep = $("#ep").value; if (!tok || !ep) return;
   Object.assign(S, { ep, tok }); $("#loginForm").hidden = true; $("#checking").hidden = false;     // no form to click while checking
   const ok = await load(); if (!ok) endSession(S.tok ? "" : "החיבור פג. צריך להזין סיסמה שוב."); })();
+
+/* v1.60.0 demo data for the analytics card: made-up families around a few towns and their actions on real places */
+function demoAnalytics(x) {
+  let seed = 11; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280, pick = a => a[Math.floor(rnd() * a.length)];
+  const T = [["קריית ים", 32.85, 35.07, 9], ["חיפה", 32.8, 35.0, 14], ["קריית ביאליק", 32.85, 35.1, 6], ["עכו", 32.9, 35.08, 4], ["נהריה", 33.0, 35.1, 3], ["כרמיאל", 32.9, 35.3, 4], ["תל אביב–יפו", 32.1, 34.8, 5], ["ירושלים", 31.8, 35.2, 3]];
+  const fp = [], ev = [], now = Date.now() / 1000, L = (PL.list || []).filter(p => p.la != null && !p.anon);
+  const near = (t, lim) => L.filter(p => Math.abs(p.la - t[1]) < lim && Math.abs(p.lo - t[2]) < lim);
+  const KB = ["0-2", "3-5", "6-9", "10-13", "14+"];
+  T.forEach(t => { const pool = near(t, 0.35).filter(p => !p.osm || rnd() < 0.15).slice(0, 120);
+    for (let i = 0; i < t[3]; i++) { const id = "demo" + t[0].length + "_" + i + "_" + Math.floor(rnd() * 1e6), nk = 1 + Math.floor(rnd() * 3), kb = [...new Set(Array.from({ length: nk }, () => pick(KB.slice(0, 4))))].join(",");
+      fp.push([id, "2026-11-20", t[0], t[1] > 32.75 ? (t[2] > 35.15 || t[1] > 32.95 ? "north" : "haifa") : t[1] > 31.95 ? "center" : "jerusalem", t[1], t[2], 2, nk, kb, rnd() < 0.3 ? 1 : 0, rnd() < 0.15 ? "stroller" : "none", rnd() < 0.85 ? "car" : "transit", pick([30, 45, 45, 60, 90]), "drive"]);
+      const n = 4 + Math.floor(rnd() * 14);
+      for (let k = 0; k < n && pool.length; k++) { const p = rnd() < 0.5 ? pool[Math.floor(rnd() * Math.min(12, pool.length))] : pick(pool), m = Math.max(5, Math.round((5 + 60 * 1.3 * Math.hypot((p.la - t[1]) * 111, (p.lo - t[2]) * 94) / Math.min(80, 14 + 1.8 * Math.hypot((p.la - t[1]) * 111, (p.lo - t[2]) * 94))) / 5) * 5);
+        const ts = Math.round(now - rnd() * 80 * 86400); ev.push([ts, id, "place", p.id, m, p.n]);
+        if (rnd() < 0.45) ev.push([ts + 60, id, "nav", p.id, m, p.n]); if (rnd() < 0.2) ev.push([ts + 30, id, "want", p.id, m, p.n]);
+        if (rnd() < 0.25) ev.push([ts + 9000, id, "visited", p.id, m, p.n]); if (rnd() < 0.12) ev.push([ts + 9100, id, rnd() < 0.8 ? "like" : "hide", p.id, m, p.n]); } } });
+  return { ok: true, days: (x && x.days) || 90, fp, ev, cut: false };
+}

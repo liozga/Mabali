@@ -20,7 +20,7 @@ await step('version.json', async () => { const r = await get(SITE + 'version.jso
   ok('version.json matches the app (self-update works)', r.body && r.body.v === appV, `version.json=${r.body && r.body.v} app=${appV}`); });
 await step('places.json', async () => { const r = await get(SITE + 'places.json?t=' + Date.now(), true); const n = Array.isArray(r.body) ? r.body.length : (r.body && r.body.places || []).length;
   ok(`places.json has at least ${MIN_PLACES} places`, n >= MIN_PLACES, String(n)); });
-for (const f of ['admin.html', 'admin.js', 'manifest.webmanifest', 'icons/apple-touch-icon-180.png'])
+for (const f of ['admin.html', 'admin.js', 'admin_an.js', 'manifest.webmanifest', 'icons/apple-touch-icon-180.png'])
   await step(f, async () => { const r = await get(SITE + f); ok(`${f} is served`, r.status === 200); });
 await step('admin endpoint', async () => { const r = await get(SITE + 'admin.js?t=' + Date.now()); const ep = (r.body.match(/ENDPOINT\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
   ok('dashboard uses the same server as the app', !!endpoint && ep === endpoint); });

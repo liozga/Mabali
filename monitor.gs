@@ -1,8 +1,9 @@
 /**
- * מה בא לי – שרת הניטור (גרסה 1.55.1, 21.11.2026)
+ * מה בא לי – שרת הניטור (גרסה 1.56.0, 26.11.2026)
  * כולל: כניסת מנהל מאובטחת (1.49.0), עריכה והסתרה של מקומות ומחיקת פניות (1.52.0), מחיקת פרטי קשר אחרי 12 חודשים (1.54.0),
- * בדיקת מקומות שנסגרו לצמיתות בגוגל מפס – checkClosedPlaces (1.55.0; 1.55.1: קצב איטי והמשך אוטומטי אחרי מגבלת דקה).
- * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.55.1".
+ * בדיקת מקומות שנסגרו לצמיתות בגוגל מפס – checkClosedPlaces (1.55.0; 1.55.1: קצב איטי והמשך אוטומטי אחרי מגבלת דקה),
+ * פרופילי משפחות אנונימיים (באישור נפרד) ופילוחים בלוח הבקרה – analytics (1.56.0).
+ * בדיקה: פתיחת כתובת ה-/exec בדפדפן מציגה "v":"1.56.0".
  * קולט מהאפליקציה: נתוני שימוש אנונימיים (רק ממי שאישר), שגיאות טכניות, דיווחי תקלות ומשוב, והמלצות על מקומות.
  * מחזיר ללוח הבקרה (admin.html) סיכומים, ומאפשר לעדכן סטטוס לדיווחים – רק עם סיסמת המנהל.
  *
@@ -15,19 +16,19 @@
  */
 const TZ = 'Asia/Jerusalem';
 const T_EV = 'אירועים', T_REP = 'דיווחים', T_ERR = 'שגיאות', T_SUG = 'המלצות מקומות';
-const H_EV = ['זמן', 'מזהה מכשיר', 'ביקור', 'אירוע', 'פרט', 'גרסה', 'סביבה', 'מסך'];
+const H_EV = ['זמן', 'מזהה מכשיר', 'ביקור', 'אירוע', 'פרט', 'גרסה', 'סביבה', 'מסך', 'מזהה מקום', 'דקות נסיעה'];
 const H_REP = ['מספר', 'התקבל', 'סוג', 'מקום', 'תיאור', 'ליצירת קשר', 'פרטים טכניים', 'גרסה', 'מזהה מכשיר', 'סטטוס', 'הערות מנהל', 'עודכן', 'מזהה מקום'];
 const H_ERR = ['זמן', 'מזהה מכשיר', 'הודעה', 'מקור', 'גרסה', 'דפדפן'];
 const H_SUG = ['התקבל', 'שם המקום', 'יישוב/כתובת', 'סוג', 'קישור', 'בפנים/בחוץ', 'מחיר מבוגר', 'מחיר ילד', 'גילאים', 'כלבים', 'נגישות', 'למה ממליצים', 'איש קשר', 'משפחה', 'גרסה', 'סטטוס', 'הערות שלי'];
 const REP_STATUS = ['חדש', 'בטיפול', 'טופל', 'נדחה'];
 const SUG_STATUS = ['ממתין', 'בבדיקה', 'אושר – להוסיף', 'נדחה', 'כבר קיים'];
 const REP_TYPES = ['תקלה', 'שאלה', 'בקשה', 'משוב', 'טעות במידע', 'ביקור'];
-const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'calendar', 'filter', 'tour', 'family_new', 'group'];
+const EVENTS = ['open', 'tab', 'place', 'nav', 'day_add', 'visited', 'share', 'calendar', 'filter', 'tour', 'family_new', 'group', 'want', 'like', 'hide', 'op_clear', 'seg', 'nav_app'];
 
 /* ---------- entry points ---------- */
 function doGet(e) {
   if (e && e.parameter && e.parameter.op === 'ov') return out_(ovPublic_());   // place corrections, read by the app (public data only)
-  return out_({ ok: true, app: 'mabali-monitor', v: '1.55.1' });
+  return out_({ ok: true, app: 'mabali-monitor', v: '1.56.0' });
 }
 
 function doPost(e) {
@@ -52,8 +53,10 @@ function doPost(e) {
 function events_(d) {
   const list = Array.isArray(d.list) ? d.list.slice(0, 50) : [];
   const now = new Date(), id = clean_(d.id, 40), s = clean_(d.s, 20), ver = clean_(d.ver, 12), env = clean_(d.env, 20), scr = clean_(d.scr, 12);
-  const rows = list.filter(x => x && EVENTS.indexOf(x.e) >= 0).map(x => [now, id, s, x.e, clean_(x.d, 80), ver, env, scr]);
+  const num = (v, lo, hi) => { v = Math.round(+v); return isFinite(v) && v >= lo && v <= hi ? v : ''; };
+  const rows = list.filter(x => x && EVENTS.indexOf(x.e) >= 0).map(x => [now, id, s, x.e, clean_(x.d, 80), ver, env, scr, num(x.p, 1, 9e12), num(x.m, 0, 600)]);
   if (rows.length) { const sh = sheet_(T_EV, H_EV); sh.getRange(sh.getLastRow() + 1, 1, rows.length, H_EV.length).setValues(rows); }
+  if (d.fp && typeof d.fp === 'object') fpSave_(id, d.fp, ver);
   return { ok: true, n: rows.length };
 }
 function error_(d) {
@@ -126,6 +129,7 @@ function admin_(d) {
   if (d.op === 'stats') { const s = stats_(Math.max(7, Math.min(90, +d.days || 30))); s.logins = rows_(T_LOG, H_LOG).slice(-30).reverse().map(r => ({ at: r[0] ? new Date(r[0]).toISOString() : '', what: r[1], ua: r[2] })); return s; }
   if (d.op === 'status') return setStatus_(T_REP, 1, String(d.ticket || ''), 10, REP_STATUS, d.status, d.note, 11, 12);
   if (d.op === 'sugStatus') return setStatus_(T_SUG, 0, String(d.row || ''), 16, SUG_STATUS, d.status, d.note, 17, 0);
+  if (d.op === 'analytics') return analytics_(Math.max(7, Math.min(180, +d.days || 90)));
   if (d.op === 'placeSave') return placeSave_(d);
   if (d.op === 'placeReset') return placeReset_(d);
   if (d.op === 'repDelete') return repDelete_(d);
@@ -305,6 +309,35 @@ function checkClosedPlaces() {
   return msg;
 }
 
+/* ---------- 1.56.0: anonymous family profiles (sent only with the app's separate "פרטים כלליים לניתוח" consent) ----------
+ * One row per device, refreshed at most once a day. Coarse by design: nearest locality, location rounded to 0.05° (~5 km),
+ * kids' age bands, no names, no exact ages, no address. Rows not refreshed for 180 days are removed by trimOldEvents. */
+const T_FP = 'פרופילי משפחות', H_FP = ['מזהה מכשיר', 'עודכן', 'יישוב', 'אזור', 'קו רוחב (מעוגל)', 'קו אורך (מעוגל)', 'מבוגרים', 'ילדים', 'טווחי גילאים', 'כלב', 'נגישות', 'אמצעי הגעה', 'זמן נסיעה מועדף', 'חיפוש לפי', 'גרסה'];
+const FP_ACC = ['none', 'stroller', 'wheel'], FP_MODE = ['car', 'transit', 'walk'], FP_RG = ['', 'north', 'haifa', 'center', 'jerusalem', 'south', 'eilat'];
+function fpSave_(id, f, ver) {
+  if (!id) return;
+  const cache = CacheService.getScriptCache(), ck = 'fp_' + hash_(id).slice(0, 20); if (cache.get(ck)) return;
+  const r2 = v => { v = Math.round(+v * 20) / 20; return isFinite(v) ? v : ''; }, n = (v, hi) => { v = Math.round(+v); return isFinite(v) && v >= 0 && v <= hi ? v : ''; };
+  const kb = String(f.kb || '').split(',').filter(x => /^(0-2|3-5|6-9|10-13|14\+)$/.test(x)).join(',');
+  const la = r2(f.la), lo = r2(f.lo); if (!(la > 29 && la < 33.5 && lo > 34 && lo < 36)) return;
+  const row = [id, new Date(), clean_(f.c, 40), FP_RG.indexOf(f.rg) >= 0 ? f.rg : '', la, lo, n(f.ad, 10), n(f.nk, 10), kb, f.dog ? 1 : 0,
+    FP_ACC.indexOf(f.acc) >= 0 ? f.acc : 'none', FP_MODE.indexOf(f.md) >= 0 ? f.md : 'car', n(f.dr, 600), f.w === 'region' ? 'region' : 'drive', clean_(ver, 12)];
+  const sh = sheet_(T_FP, H_FP), last = sh.getLastRow();
+  const ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0])) : [], i = ids.indexOf(id);
+  if (i >= 0) sh.getRange(i + 2, 1, 1, H_FP.length).setValues([row]); else sh.appendRow(row);
+  cache.put(ck, '1', 21600);
+}
+/* The dashboard slices these itself: profiles + place events (place / nav / want / day_add / visited / like / hide) of the period. */
+const AN_EVENTS = ['place', 'nav', 'want', 'day_add', 'visited', 'like', 'hide', 'share', 'open'];
+function analytics_(days) {
+  const since = Date.now() - days * 864e5;
+  const fp = rows_(T_FP, H_FP).filter(r => r[0]).map(r => [String(r[0]), r[1] ? new Date(r[1]).toISOString().slice(0, 10) : '', r[2], r[3], +r[4], +r[5], +r[6] || 0, +r[7] || 0, String(r[8] || ''), +r[9] || 0, r[10], r[11], +r[12] || 0, r[13]]);
+  const ev = [];
+  rows_(T_EV, H_EV).forEach(r => { if (AN_EVENTS.indexOf(r[3]) < 0) return; const t = new Date(r[0]).getTime(); if (!(t >= since)) return;
+    ev.push([Math.round(t / 1000), String(r[1]), r[3], +r[8] || 0, r[9] === '' || r[9] == null ? -1 : +r[9], String(r[4] || '').slice(0, 60)]); });
+  return { ok: true, days: days, fp: fp, ev: ev.slice(-60000), cut: ev.length > 60000 };
+}
+
 /* ---------- helpers ---------- */
 function rate_(id, n) {                                                        // at most 600 items per device per 10 minutes
   const c = CacheService.getScriptCache(), k = 'rl_' + id.slice(0, 40), v = +(c.get(k) || 0) + Math.max(1, n);
@@ -317,6 +350,8 @@ function sheet_(name, head) {
     sh = ss.insertSheet(name); sh.setRightToLeft(true);
     sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#0A6B73').setFontColor('#ffffff');
     sh.setFrozenRows(1);
+  } else if (sh.getLastColumn() < head.length) {   // 1.56.0: a sheet from an older version gets the new column titles
+    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#0A6B73').setFontColor('#ffffff');
   }
   return sh;
 }
@@ -333,6 +368,8 @@ function trimOldEvents() {
     if (k) sh.deleteRows(2, k);
   });
   purgeContacts_();
+  { const sh = sheet_(T_FP, H_FP), n = sh.getLastRow() - 1; if (n > 0) { const cut = Date.now() - 180 * 864e5, v = sh.getRange(2, 2, n, 1).getValues();
+    for (let i = n - 1; i >= 0; i--) if (new Date(v[i][0]).getTime() < cut) sh.deleteRow(i + 2); } }
 }
 /* v1.54.0 privacy: 12 months after a report or a suggestion arrived, the personal details in it are erased (the content stays, for
    improving the app). Reports: contact (col 6) and device id (col 9). Suggestions: contact (col 13) and family name (col 14). */

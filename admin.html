@@ -87,6 +87,13 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
 .pill.ed{background:var(--warn-soft);color:var(--warn)}.pill.fx{background:var(--sea-soft);color:var(--ink)}.pill.hid{background:var(--bad-soft);color:var(--bad)}
 #toast{position:fixed;inset-inline:16px;bottom:16px;margin-inline:auto;max-width:560px;z-index:30;background:var(--ink);color:var(--bg);border-radius:12px;padding:12px 16px;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.25)}#toast.bad{background:var(--bad);color:#fff}#toast[hidden]{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.an h3{font-size:15px;margin:18px 0 8px}
+.an-f{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin-bottom:8px}.an-f label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.an-b{display:flex;gap:8px;flex-wrap:wrap}.an-one{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}.an-one select{flex:1 1 160px;width:auto;min-width:0;max-width:100%}
+.an-map{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:16px;align-items:start}@media (max-width:820px){.an-map{grid-template-columns:1fr}}.an-map>*{min-width:0}.an-mapbox canvas{max-width:100%;height:auto}
+.an-mapbox{background:var(--bg);border-radius:12px;padding:8px;max-width:440px}.an-mapbox canvas{display:block;margin:0 auto}
+.lg{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle}.lg.sea{background:var(--sea)}.lg.warn{background:var(--warn)}
+.an-g h3{margin-top:4px}button.lnk{border:0;background:none;padding:0;color:var(--sea);text-decoration:underline;font-weight:500;text-align:right;border-radius:4px}
 </style>
 </head>
 <body>
@@ -155,6 +162,48 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
 
     <div class="card"><h2>מקומות</h2><p class="sub">פתיחת פרטים, ניווט, הוספה ליום כיף וסימון "ביקרנו", לפי מקום</p><div class="tbl" id="places"></div></div>
 
+    <section class="card an" id="anCard" aria-labelledby="anT">
+      <h2 id="anT">פילוח וניתוח משפחות</h2>
+      <p class="sub">רק משפחות שאישרו באפליקציה "פרטים כלליים לניתוח": יישוב (בלי כתובת), טווחי גילאי ילדים, כלב, נגישות, אמצעי הגעה וזמן נסיעה מועדף. אין כאן שמות או כתובות.</p>
+      <div class="an-f" role="group" aria-label="סינון">
+        <label>תקופה<select id="anDays"><option value="30">30 ימים</option><option value="90" selected>90 ימים</option><option value="180">180 ימים</option></select></label>
+        <label>יישוב מגורים<select id="anCity"></select></label>
+        <label>אזור<select id="anRg"></select></label>
+        <label>גילאי ילדים<select id="anKb"></select></label>
+        <label>כלב<select id="anDog"></select></label>
+        <label>אמצעי הגעה<select id="anMd"></select></label>
+        <label>סוג מקום<select id="anKind"></select></label>
+        <div class="an-b"><button type="button" id="anReset">ניקוי סינון</button><button type="button" id="anCsv">הורדת CSV</button></div>
+      </div>
+      <p class="small" id="anMsg" role="status"></p>
+      <div class="kpis" id="anKpis"></div>
+      <div class="an-map">
+        <div class="an-mapbox"><canvas id="anMap" role="img" aria-label="מפה"></canvas>
+          <p class="small"><span class="lg sea"></span> יישובי מגורים (גודל = משפחות) · <span class="lg warn"></span> יעדים מובילים · קווים: מאיפה מגיעים לאן</p></div>
+        <div><h3>יישובי מגורים</h3><ul class="hbars" id="anCities"></ul></div>
+      </div>
+      <h3>מקומות מובילים</h3><p class="sub">מדורג לפי מעורבות: ביקרנו ×4, ניווט ×3, 👍 ×3, רוצים לבקר ×2, יום כיף ×2, פרטים ×1, 👎 מוריד. לחיצה על מקום מציגה מאיפה מגיעים אליו.</p>
+      <div class="tbl" id="anTop"></div>
+      <h3>עסקים מובילים (מקומות בתשלום)</h3><p class="sub">"המרה לניווט" = ניווטים מתוך פתיחות הפרטים. נתון טוב לשיחה עם עסק.</p>
+      <div class="tbl" id="anBiz"></div>
+      <h3 id="anFromH">מאיפה מגיעים אל…</h3>
+      <label class="an-one"><span class="small">מקום</span><select id="anPlace"></select></label>
+      <p class="small" id="anFromSum"></p><ul class="hbars" id="anFrom"></ul>
+      <h3>מקומות קרובים שלא מגיעים אליהם</h3>
+      <label class="an-one"><span class="small">עד</span><select id="anNear"><option value="15">15 דק׳</option><option value="30" selected>30 דק׳</option><option value="45">45 דק׳</option><option value="60">שעה</option></select><span class="small">נסיעה מהיישובים העיקריים בסינון</span></label>
+      <p class="small" id="anUntapSum"></p><div class="tbl" id="anUntap"></div>
+      <div class="grid2 an-g">
+        <div><h3>סוגי מקומות</h3><ul class="hbars" id="anKinds"></ul></div>
+        <div><h3>מפתיחה לביקור</h3><ul class="hbars" id="anFunnel"></ul></div>
+        <div><h3>זמן נסיעה בפועל (ניווט וביקור)</h3><ul class="hbars" id="anMins"></ul></div>
+        <div><h3>זמן נסיעה מועדף בהגדרות</h3><ul class="hbars" id="anPref"></ul></div>
+        <div><h3>גילאי ילדים</h3><ul class="hbars" id="anKbc"></ul></div>
+        <div><h3>ימים בשבוע</h3><ul class="hbars" id="anWd"></ul></div>
+        <div><h3>אמצעי הגעה</h3><ul class="hbars" id="anMd2"></ul></div>
+        <div><h3>נגישות</h3><ul class="hbars" id="anAcc"></ul></div>
+      </div>
+    </section>
+
     <div class="card"><h2>שגיאות טכניות</h2><p class="sub">שגיאות שקרו אצל משתמשים, מקובצות לפי הודעה ומיקום בקוד</p><div class="tbl" id="errors"></div></div>
 
     <div class="grid2" style="margin-bottom:16px">
@@ -181,5 +230,6 @@ details summary{cursor:pointer;color:var(--sea);font-size:13px}
   </div>
 </div>
 <script src="admin.js"></script>
+<script src="admin_an.js"></script>
 </body>
 </html>
